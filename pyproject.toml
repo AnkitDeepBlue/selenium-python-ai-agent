@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "selenium-python-ai-agent"
+version = "0.1.0"
+description = "AI-powered multi-agent framework to plan, generate and heal Selenium Python tests"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Ankit Tripathi" }]
+keywords = ["selenium", "testing", "ai", "agent", "automation", "qa", "anthropic", "openai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "anthropic>=0.25.0",
+    "openai>=1.0.0",
+    "selenium>=4.0.0",
+    "pytest>=8.0.0",
+    "webdriver-manager>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AnkitDeepBlue/selenium-python-ai-agent"
+Repository = "https://github.com/AnkitDeepBlue/selenium-python-ai-agent"
+Issues = "https://github.com/AnkitDeepBlue/selenium-python-ai-agent/issues"
+
+[project.scripts]
+selenium-agent = "selenium_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["selenium_agent*"]
