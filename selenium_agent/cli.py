@@ -4,17 +4,20 @@ CLI Entry Point for Selenium AI Agent
 Usage:
     selenium-agent "test login page of amazon.com"
     selenium-agent "test search on flipkart.com" --api-key YOUR_KEY
+    selenium-agent "test checkout flow" --provider openai --api-key YOUR_OPENAI_KEY
     selenium-agent "test checkout flow" --output-dir my_tests --no-heal
     selenium-agent --plan-only "test login page"
     selenium-agent --heal-only tests/test_login.py pages/login_page.py
 """
 
 import argparse
-import sys
 import json
+import os
+import sys
+
 from selenium_agent.core.orchestrator import Orchestrator
+from selenium_agent.utils.llm import DEFAULT_PROVIDER
 from selenium_agent.utils.logger import setup_logger
-from selenium_agent.utils.llm import DEFAULT_PROVIDER, format_missing_api_key_error, normalize_provider, resolve_api_key
 
 logger = setup_logger("CLI")
 
@@ -26,15 +29,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Using Anthropic Claude (default)
   selenium-agent "test login page of amazon.com"
-  selenium-agent "test search functionality on flipkart.com" --provider anthropic --api-key sk-ant-xxx
-  selenium-agent "test signup page" --provider openai --api-key sk-proj-xxx
+  selenium-agent "test search on flipkart.com" --api-key sk-ant-xxx
+
+  # Using OpenAI
+  selenium-agent "test login page" --provider openai --api-key sk-xxx
+  selenium-agent "test checkout" --provider openai  # uses OPENAI_API_KEY env var
+
+  # Other options
   selenium-agent "test checkout flow" --output-dir my_project/tests
   selenium-agent "test signup page" --no-heal
   selenium-agent --plan-only "test login page of github.com"
   selenium-agent --heal-only generated_tests/tests/test_login.py
 
-Set ANTHROPIC_API_KEY or OPENAI_API_KEY based on --provider.
+Get your Anthropic API key at : https://console.anthropic.com
+Get your OpenAI API key at    : https://platform.openai.com
         """
     )
 
@@ -46,17 +56,18 @@ Set ANTHROPIC_API_KEY or OPENAI_API_KEY based on --provider.
     parser.add_argument(
         "--api-key",
         default=None,
-        help="Provider API key. Uses ANTHROPIC_API_KEY or OPENAI_API_KEY based on --provider"
+        help="LLM provider API key (or set ANTHROPIC_API_KEY / OPENAI_API_KEY env var)"
     )
     parser.add_argument(
         "--provider",
         default=DEFAULT_PROVIDER,
-        help="LLM provider to use: anthropic or openai (default: anthropic)"
+        choices=["anthropic", "openai"],
+        help="LLM provider to use (default: anthropic)"
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Optional model override for the selected provider"
+        help="Override default model for selected provider"
     )
     parser.add_argument(
         "--output-dir",
@@ -93,23 +104,20 @@ Set ANTHROPIC_API_KEY or OPENAI_API_KEY based on --provider.
 
     args = parser.parse_args()
 
-    # Resolve API key
-    provider = normalize_provider(args.provider)
-    api_key = resolve_api_key(provider=provider, api_key=args.api_key)
-    if not api_key:
-        print(f"\n❌ ERROR: {format_missing_api_key_error(provider)}\n")
-        sys.exit(1)
-
     try:
         agent = Orchestrator(
-            api_key=api_key,
+            api_key=args.api_key,
+            provider=args.provider,
+            model=args.model,
             output_dir=args.output_dir,
             max_heal_retries=args.max_retries,
             auto_heal=not args.no_heal,
-            provider=provider,
-            model=args.model,
         )
+    except ValueError as exc:
+        print(f"\n❌ {exc}\n")
+        sys.exit(1)
 
+    try:
         # Mode: heal only
         if args.heal_only:
             logger.info(f"🩺 Healing files: {args.heal_only}")

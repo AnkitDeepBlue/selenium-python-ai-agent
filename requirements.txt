@@ -1,5 +1,5 @@
 anthropic>=0.25.0
-openai>=1.0.0
+openai>=1.30.0
 selenium>=4.0.0
 pytest>=8.0.0
 webdriver-manager>=4.0.0

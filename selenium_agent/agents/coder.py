@@ -2,18 +2,13 @@
 CODER AGENT
 ===========
 Takes the Planner's structured plan and generates Selenium Python test code.
-
-Responsibilities:
-- Generate Page Object Model classes
-- Generate pytest test files
-- Follow best practices (explicit waits, proper assertions)
-- Save files to output directory
+Supports both Anthropic Claude and OpenAI as LLM providers.
 """
 
+import json
 import os
-from pathlib import Path
 from selenium_agent.utils.logger import setup_logger
-from selenium_agent.utils.llm import create_llm_client, get_default_model
+from selenium_agent.utils.llm import create_llm_client, DEFAULT_PROVIDER, get_default_model
 from selenium_agent.utils.paths import safe_output_path
 
 logger = setup_logger("CoderAgent")
@@ -35,7 +30,7 @@ Rules:
    a) pages/<page_name>_page.py  — Page Object class
    b) tests/test_<page_name>.py  — pytest test file
 
-Respond with valid JSON only:
+Respond with valid JSON only. No extra text. No markdown:
 {
   "files": [
     {
@@ -56,22 +51,24 @@ class CoderAgent:
         self,
         api_key: str,
         output_dir: str = "generated_tests",
-        provider: str = "anthropic",
+        provider: str = DEFAULT_PROVIDER,
         model: str | None = None,
     ):
-        self.model = model or get_default_model(provider)
-        self.client = create_llm_client(api_key=api_key, provider=provider, model=self.model)
+        resolved_model = model or get_default_model(provider)
+        self.client = create_llm_client(provider=provider, api_key=api_key, model=resolved_model)
+        self.provider = provider
+        self.model = resolved_model
         self.output_dir = output_dir
 
-    def code(self, plan: dict) -> list[dict]:
+    def code(self, plan: dict) -> list[str]:
         logger.info("💻 Generating Selenium Python code from plan...")
 
-        import json
         raw = self.client.generate_text(
             system_prompt=CODER_SYSTEM_PROMPT,
             user_prompt=f"Generate Selenium Python code for this test plan:\n{json.dumps(plan, indent=2)}",
             max_tokens=4000,
         )
+
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -81,14 +78,13 @@ class CoderAgent:
         result = json.loads(raw)
         files = result.get("files", [])
 
-        # Save files
+        # Save files safely
         saved = []
         for file_info in files:
             filepath = safe_output_path(self.output_dir, file_info["filename"])
-            os.makedirs(filepath.parent, exist_ok=True)
-            with open(filepath, "w") as f:
-                f.write(file_info["content"])
-            saved.append(str(Path(self.output_dir) / file_info["filename"]))
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            filepath.write_text(file_info["content"], encoding="utf-8")
+            saved.append(str(filepath))
             logger.info(f"✅ Created: {filepath}")
 
         return saved
