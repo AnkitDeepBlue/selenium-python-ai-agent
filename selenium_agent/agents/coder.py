@@ -121,6 +121,17 @@ FORBIDDEN: putting page B's locators inside page A's class.
 
 FORBIDDEN: find_element(), time.sleep(), get_driver(), DriverFactory.get_driver()
 
+══ PAGES BEHIND LOGIN — NO SKIP PLACEHOLDERS, EVER ══
+
+  Auth-gated pages often can't be DOM-scanned up front, so the plan may
+  lack locators for them. In that case write the MOST LIKELY locator based
+  on the app's visible conventions (e.g. if scanned pages use data-test
+  attributes, inner pages almost certainly do too) — the Healer verifies
+  and corrects every locator against the live DOM at run time.
+
+  FORBIDDEN: pytest.skip(...) placeholders, TODO steps, empty step bodies.
+  A skipped test proves nothing; a best-effort test gets healed to green.
+
 ══ DRIVER FIXTURE — PROVIDED BY THE FRAMEWORK ══
 
   conftest.py (auto-generated) already defines the `driver` fixture.

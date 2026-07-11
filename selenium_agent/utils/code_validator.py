@@ -70,6 +70,13 @@ def validate_python(filename: str, content: str) -> ValidationResult:
                 "Test file imports/uses DriverFactory — drivers come only from "
                 "the conftest.py `driver` fixture"
             )
+        if re.search(r"pytest\.skip\s*\(", content):
+            result.valid = False
+            result.errors.append(
+                "Generated tests must not contain pytest.skip placeholders — "
+                "implement every step with the best available locator; the "
+                "healer verifies and corrects locators against the live DOM"
+            )
 
     return result
 

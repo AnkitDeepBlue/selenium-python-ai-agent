@@ -289,3 +289,25 @@ def test_conftest_registers_plan_markers(tmp_path: Path):
     assert "def pytest_configure(config):" in content
     assert "'checkout'" in content and "'e2e'" in content and "'smoke'" in content
     assert "def driver():" in content
+
+
+def test_validator_rejects_skip_placeholders_in_test_files():
+    content = (
+        "import pytest\n"
+        "def test_a(driver):\n"
+        "    pytest.skip('Pending: locators not provided')\n"
+    )
+    result = validate_python("tests/test_a.py", content)
+    assert not result.valid
+    assert any("skip" in e.lower() for e in result.errors)
+
+
+def test_healer_green_requires_actual_passes():
+    from selenium_agent.agents.healer import HealerAgent
+
+    green = HealerAgent._is_green
+    assert green(True, "===== 3 passed in 12.3s =====")
+    assert not green(True, "===== 1 skipped in 3.5s =====")            # all skipped
+    assert not green(True, "SKIPPED [1] x.py: Pending: locators\n1 passed, 1 skipped")  # pending placeholder
+    assert not green(False, "===== 2 passed, 1 failed =====")          # non-zero exit
+    assert green(True, "===== 2 passed, 1 deselected in 5s =====")

@@ -313,7 +313,22 @@ class HealerAgent:
                 f"pytest timed out after {PYTEST_TIMEOUT_SECONDS}s — "
                 f"likely a hung wait or a browser that never loaded."
             )
-        return result.returncode == 0, result.stdout + result.stderr
+        output = result.stdout + result.stderr
+        return self._is_green(result.returncode == 0, output), output
+
+    @staticmethod
+    def _is_green(returncode_ok: bool, output: str) -> bool:
+        """
+        Green means tests genuinely PASSED — not merely exit code 0.
+        pytest exits 0 when every test is SKIPPED, but a generated suite
+        full of skip placeholders proves nothing.
+        """
+        if not returncode_ok:
+            return False
+        if "Pending:" in output:  # generated skip placeholders = unfinished work
+            return False
+        m = re.search(r"(\d+) passed", output)
+        return bool(m) and int(m.group(1)) >= 1
 
     @staticmethod
     def _trim_output(output: str) -> str:
