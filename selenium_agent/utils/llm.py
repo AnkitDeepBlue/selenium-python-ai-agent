@@ -19,7 +19,7 @@ logger = setup_logger("LLM")
 
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODELS = {
-    "anthropic": "claude-sonnet-4-20250514",
+    "anthropic": "claude-sonnet-5",
     "openai": "gpt-5-mini",
 }
 API_KEY_ENV_VARS = {

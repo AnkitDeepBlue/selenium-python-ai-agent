@@ -59,14 +59,15 @@ Works with **any OpenAI or Anthropic model** — pick the one that fits your bud
 selenium-agent config --provider openai --model gpt-4o-mini    # fast & cheap
 selenium-agent config --provider openai --model gpt-4o         # strong all-rounder
 selenium-agent config --provider openai --model gpt-5          # most intelligent (reasoning)
-selenium-agent config --provider anthropic --model claude-sonnet-4-20250514
+selenium-agent config --provider anthropic --model claude-sonnet-5   # strong all-rounder
+selenium-agent config --provider anthropic --model claude-fable-5    # most intelligent
 
 selenium-agent config --base-url https://www.saucedemo.com     # default URL for all runs
 selenium-agent config --headless          # (--no-headless to turn off)
 selenium-agent config --show              # verify saved config
 ```
 
-> 💡 For simple flows `gpt-4o-mini` is fine; for **multi-page/complex flows** use `gpt-4o` or `gpt-5` — noticeably better plans and one-shot code.
+> 💡 For simple flows `gpt-4o-mini` / `claude-haiku-4-5` are fine; for **multi-page/complex flows** use `gpt-4o`, `gpt-5`, `claude-sonnet-5` or `claude-fable-5` — noticeably better plans and one-shot code.
 
 ### 4. Generate & Run Tests
 
@@ -351,7 +352,9 @@ Subcommands: `selenium-agent config …`, `selenium-agent init-agents …`, `sel
 | OpenAI | `gpt-4o-mini` | Simple flows, lowest cost |
 | OpenAI | `gpt-4o` | Strong default for real projects |
 | OpenAI | `gpt-5` / `gpt-5-mini` | Complex multi-page flows (reasoning models — token budgets handled automatically) |
-| Anthropic | `claude-sonnet-4-20250514` | Strong default for real projects |
+| Anthropic | `claude-fable-5` | Most intelligent — hardest multi-page flows |
+| Anthropic | `claude-opus-4-8` | Complex flows, high quality |
+| Anthropic | `claude-sonnet-5` | Strong default for real projects |
 | Anthropic | `claude-haiku-4-5-20251001` | Simple flows, lowest cost |
 
 ---
