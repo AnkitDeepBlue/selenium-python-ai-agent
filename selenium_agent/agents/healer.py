@@ -39,9 +39,19 @@ HEALER_SYSTEM_PROMPT = """
 You are an expert Selenium Python debugger. Your job is 360° healing.
 
 You receive:
-  1. The failing pytest output
+  1. The failing pytest output. It may contain two high-signal lines:
+     FAILURE_URL: <url>         ← the page the browser was ON when it failed
+     FAILURE_ERRORS: [...]      ← alert/validation messages visible at failure
+                                  (THE most direct clue — read this first)
+     FAILURE_PAGE_TEXT: <text>  ← that page's visible text
   2. Real DOM locators scanned from the live page(s)
   3. Current code files (page objects + test files)
+
+══ FORM SUBMITS THAT GO NOWHERE ══
+If FAILURE_URL shows the app stayed on the same form page after submit,
+the submission was REJECTED — read FAILURE_PAGE_TEXT for validation errors.
+The usual cause: required fields were not filled. Fill EVERY input/select
+listed in that page's scan block, not just the ones the test already types.
 
 ══ ARCHITECTURE RULE — READ THIS FIRST ══
 
@@ -99,6 +109,18 @@ AttributeError: method not found
      self.wait_for_url()  self.is_visible()  self.open()  self.safe_type()
   NEVER: find_element(), wait_for_element_visible(), time.sleep()
 
+METHOD SIGNATURES — locator is ALWAYS a (By.X, 'selector') tuple:
+  wait_for_text(LOCATOR_TUPLE, 'expected text')   ✓
+  wait_for_text('h3', 'expected text')            ✗ raw string is not a locator
+  wait_for_url('url-fragment')                    ← the ONLY string-taking wait
+
+DRIVER / FIXTURES:
+  conftest.py provides the `driver` fixture — test functions accept `driver`
+  as a parameter. NEVER define a driver fixture in a test file, NEVER
+  import/call DriverFactory in test files, NEVER create drivers manually.
+  "fixture 'driver' not found" → the test file broke this rule; restore the
+  plain `def test_x(driver):` signature.
+
 AssertionError
   → Read the assertion and the actual value in the output. Decide whether the
     expectation is wrong (fix assertion) or the app state was not reached
@@ -118,8 +140,30 @@ StaleElementReferenceException
 ══ LOCATOR RULES ══
   - CSS preferred over XPath
   - Use ONLY selectors from the DOM scan — never guess
+  - The scan is grouped per page (═══ PAGE: <url> ═══). When fixing a page
+    object, use ONLY locators from THAT page's block — NEVER borrow a
+    locator from a different page's block (it will not exist on this page)
+  - NEVER use a selector marked "NOT UNIQUE" for a single element
   - Format in page object: NAME = (By.CSS_SELECTOR, 'selector')
   - test files reference by name: page.NAME — no By, no raw strings
+
+══ TEST DATA ══
+  - Errors like "already taken" / "already exists" / "already associated"
+    mean the test data is HARDCODED and collides with a previous run.
+    Fix: generate unique values at runtime in the test:
+      import uuid
+      unique = uuid.uuid4().hex[:8]
+      email = "qa." + unique + "@example.com"
+  - "password has appeared in a data leak" / "password too weak" means the
+    password is a common pattern (Password@123 etc.) — breach-list checks
+    reject it. Fix: password = "Xk9#" + unique + "!Qz" (strong AND unique).
+
+══ CAPTCHA / BOT PROTECTION ══
+  If the DOM scan reports CAPTCHA/bot protection on a page, the flow is
+  blocked BY DESIGN — no locator or wait fix will make it pass, and captcha
+  must never be bypassed. Return {"fixed_files": [], "fix_summary":
+  "BLOCKED: captcha/bot protection on <url> — run against an environment
+  with captcha disabled"} instead of changing code.
 
 ══ FILE RULES ══
   - Return COMPLETE files — never truncate, never drop functions
@@ -181,7 +225,7 @@ Respond with valid JSON only:
 
 class HealerAgent:
     def __init__(self, api_key: str, output_dir: str = "generated_tests",
-                 max_retries: int = 3, provider: str = DEFAULT_PROVIDER,
+                 max_retries: int = 5, provider: str = DEFAULT_PROVIDER,
                  model: str | None = None):
         resolved_model = model or get_default_model(provider)
         self.client = create_llm_client(provider=provider, api_key=api_key, model=resolved_model)
@@ -483,13 +527,25 @@ class HealerAgent:
         known_fix = SeleniumErrorMap.get_fix_summary(output)
 
         # ── DOM re-scan of every URL the tests touch (live ground truth) ──
+        # Pure-Python failures (import/collection/API-usage errors) don't
+        # need a browser — skip the scans and fix the code directly.
         locator_context = ""
-        urls = self._extract_urls(resolved, pytest_output=output)
+        needs_dom = ("selenium.common.exceptions" in output
+                     or "FAILURE_URL:" in output)
+        urls = self._extract_urls(resolved, pytest_output=output) if needs_dom else []
+        if not needs_dom:
+            logger.info("🐍 Pure Python failure — skipping DOM scans")
         blocks = []
         for url in urls:
             if url not in scan_cache:
                 logger.info(f"🔍 DOM scan — real locators for healer: {url}")
                 elements = scan_page_locators(url, headless=True)
+                if any(el.get("kind") == "captcha" for el in elements):
+                    logger.warning(
+                        f"🚫 CAPTCHA / bot protection detected on {url} — "
+                        f"flows behind it cannot (and must not) be automated. "
+                        f"Run this flow on an environment with captcha disabled."
+                    )
                 scan_cache[url] = format_for_llm(elements, context="healing")
             if scan_cache[url]:
                 blocks.append(f"═══ PAGE: {url} ═══\n{scan_cache[url]}")

@@ -75,6 +75,12 @@ For flows that span multiple pages (login → inventory → cart → checkout �
   - DOM-scan text shows the page BEFORE any action. expected_result must
     describe the state AFTER the action (what changes/appears), never the
     pre-action text you saw in the scan
+  - If the flow CREATES an entity (account, record), mark its test_data
+    values as "GENERATE_UNIQUE_AT_RUNTIME" — hardcoded values collide with
+    previous runs (e.g. "email already taken")
+  - When a scanned page contains a form, plan locators and fill-steps for
+    ALL its inputs/selects — apps silently reject submissions with missing
+    required fields, even if the instruction names only a few
 
 OTHER RULES:
   - Use EXACT target URL — never example.com
@@ -197,7 +203,8 @@ class PlannerAgent:
         if target_url:
             extra = explore_pages or (2 if is_multi_page else 0)
             logger.info(f"🔍 Pre-plan DOM scan: {target_url} (explore={extra} extra pages)")
-            site = scan_site_locators(target_url, headless=True, max_extra_pages=extra)
+            site = scan_site_locators(target_url, headless=True, max_extra_pages=extra,
+                                      instruction=user_instruction)
             dom_context = format_site_for_llm(site, context="planning")
             total = sum(len(v) for v in site.values())
             if total:

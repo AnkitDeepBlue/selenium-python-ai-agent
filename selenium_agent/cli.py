@@ -242,7 +242,7 @@ Other examples:
             provider=cfg["provider"],
             model=cfg.get("model"),
             output_dir=args.output_dir,
-            max_heal_retries=args.max_retries or 3,
+            max_heal_retries=args.max_retries or 5,
             auto_heal=not args.no_heal,
             mode=cfg["mode"],
             project_root=args.project,

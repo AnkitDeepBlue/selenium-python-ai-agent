@@ -95,12 +95,16 @@ return (function () {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
 
-        const css   = buildCSS(el);
-        const xpath = buildXPath(el);
+        let css   = buildCSS(el);
+        let xpath = buildXPath(el);
 
         const info = {
             tag:         el.tagName.toLowerCase(),
             href:        el.href         || null,
+            options:     el.tagName === 'SELECT'
+                             ? [...el.options].slice(0, 12)
+                                   .map(o => o.textContent.trim()).filter(Boolean)
+                             : null,
             type:        el.type         || null,
             id:          el.id           || null,
             name:        el.name         || null,
@@ -114,7 +118,29 @@ return (function () {
             xpath:       xpath,
         };
 
-        // Annotate ambiguous selectors so the LLM never guesses wrong
+        // ── Uniquify ambiguous selectors by scoping to an ancestor with an id ──
+        // e.g. 'input[type="submit"]' matching both a search icon and the real
+        // form button becomes '#create_customer input[type="submit"]'.
+        if ((css && cssCount(css) > 1) || (xpath && xpathCount(xpath) > 1)) {
+            let anc = el.parentElement;
+            while (anc && anc.tagName !== 'BODY') {
+                if (anc.id) {
+                    if (css && cssCount(css) > 1) {
+                        const scoped = '#' + anc.id + ' ' + css;
+                        if (cssCount(scoped) === 1) { info.css = scoped; css = scoped; }
+                    }
+                    if (xpath && xpathCount(xpath) > 1 && xpath.indexOf('//') === 0) {
+                        const sx = '//*[@id="' + anc.id + '"]//' + xpath.slice(2);
+                        if (xpathCount(sx) === 1) { info.xpath = sx; xpath = sx; }
+                    }
+                    if ((!css || cssCount(css) === 1) && (!xpath || xpathCount(xpath) === 1))
+                        break;
+                }
+                anc = anc.parentElement;
+            }
+        }
+
+        // Annotate whatever is STILL ambiguous so the LLM never guesses wrong
         if (css) {
             const n = cssCount(css);
             if (n > 1) info.css_matches = n;
@@ -191,6 +217,22 @@ return (function () {
             css: css, xpath: xpath,
         });
     });
+
+    // ── Bot-protection detection ──
+    // A captcha (hCaptcha/reCAPTCHA/Turnstile) means automated flows that
+    // trigger it CANNOT pass — agents must report this instead of endlessly
+    // "fixing" locators.
+    if (document.querySelector(
+            'iframe[src*="hcaptcha"], iframe[src*="recaptcha"], ' +
+            'iframe[src*="turnstile"], [data-sitekey]')) {
+        results.push({
+            tag: 'iframe', kind: 'captcha', href: null, type: null,
+            id: null, name: null, placeholder: null,
+            text: 'CAPTCHA / bot protection active on this page',
+            data_test: null, data_testid: null, data_cy: null,
+            aria_label: null, css: null, xpath: null,
+        });
+    }
 
     return results;
 })();
@@ -269,15 +311,50 @@ def scan_page_locators(url: str, headless: bool = True, max_wait: int = 25) -> l
             pass
 
 
+def rank_links_by_relevance(links: list[dict], instruction: str) -> list[str]:
+    """
+    Order candidate links so the ones RELEVANT to the instruction come first.
+
+    Exploring the first N links in document order wastes the budget on nav
+    noise (search, about-us, ...) while the page the flow actually needs
+    (e.g. /account/register for a sign-up instruction) is never scanned.
+    Scores each link by how many instruction words appear in its visible
+    text or href; ties keep document order.
+
+    links: [{"href": ..., "text": ...}]  →  ordered list of hrefs
+    """
+    import re
+
+    stop = {"the", "and", "for", "with", "then", "that", "this", "page",
+            "open", "click", "verify", "form", "button", "link", "fill",
+            "random", "generated", "runtime", "unique", "finally", "was"}
+    tokens = {
+        w for w in re.findall(r"[a-z]+", instruction.lower())
+        if len(w) >= 3 and w not in stop
+    }
+
+    def score(link: dict) -> int:
+        haystack = f"{link.get('text') or ''} {link.get('href') or ''}".lower()
+        return sum(1 for t in tokens if t in haystack)
+
+    ranked = sorted(
+        enumerate(links),
+        key=lambda pair: (-score(pair[1]), pair[0]),
+    )
+    return [link.get("href") for _, link in ranked]
+
+
 def scan_site_locators(
     url: str,
     headless: bool = True,
     max_extra_pages: int = 3,
+    instruction: str = "",
 ) -> dict[str, list[dict]]:
     """
     Bounded same-origin exploration (Playwright-planner style):
     scan the target URL, then follow up to `max_extra_pages` same-origin
-    links discovered on it and scan those pages too.
+    links discovered on it and scan those pages too. When an instruction
+    is given, links relevant to it are explored first.
 
     Returns {page_url: [elements]} — the target URL is always first.
     Pages behind auth simply return whatever the redirect target renders.
@@ -292,22 +369,37 @@ def scan_site_locators(
 
     origin = urlparse(url).netloc
     seen = {url.rstrip("/"), url.rstrip("/") + "/"}
-    candidates = []
-    for el in elements:
-        href = el.get("href") or ""
-        if not href.startswith("http"):
-            continue
-        parsed = urlparse(href)
-        clean = href.split("#")[0].rstrip("/")
-        if parsed.netloc == origin and clean and clean not in seen:
-            seen.add(clean)
-            candidates.append(clean)
 
-    for extra_url in candidates[:max_extra_pages]:
-        logger.info(f"🧭 Exploring same-origin page: {extra_url}")
-        extra_elements = scan_page_locators(extra_url, headless=headless)
+    def collect_links(page_elements: list[dict]) -> list[dict]:
+        found = []
+        for el in page_elements:
+            href = el.get("href") or ""
+            if not href.startswith("http"):
+                continue
+            clean = href.split("#")[0].rstrip("/")
+            if urlparse(href).netloc == origin and clean and clean not in seen:
+                seen.add(clean)
+                found.append({"href": clean, "text": el.get("text") or ""})
+        return found
+
+    # Multi-hop, relevance-first exploration: links discovered on explored
+    # pages join the pool, so a page one hop deeper (e.g. a register form
+    # linked only from the login page) is still reachable within budget.
+    pool = collect_links(elements)
+    for _ in range(max_extra_pages):
+        if not pool:
+            break
+        if instruction:
+            best = rank_links_by_relevance(pool, instruction)[0]
+        else:
+            best = pool[0]["href"]
+        pool = [c for c in pool if c["href"] != best]
+
+        logger.info(f"🧭 Exploring same-origin page: {best}")
+        extra_elements = scan_page_locators(best, headless=headless)
         if extra_elements:
-            results[extra_url] = extra_elements
+            results[best] = extra_elements
+            pool.extend(collect_links(extra_elements))
 
     return results
 
@@ -338,7 +430,19 @@ def format_for_llm(elements: list[dict], context: str = "general") -> str:
     }.get(context, "🔍 REAL DOM LOCATORS:")
 
     lines = [header, ""]
+
+    if any(el.get("kind") == "captcha" for el in elements):
+        lines += [
+            "🚫 CAPTCHA / BOT PROTECTION IS ACTIVE ON THIS PAGE.",
+            "   Flows that trigger it (form submits, logins, sign-ups) CANNOT pass",
+            "   with automation and MUST NOT be bypassed. Do not keep fixing",
+            "   locators — report this as the root cause instead.",
+            "",
+        ]
+
     for el in elements:
+        if el.get("kind") == "captcha":
+            continue
         label = (
             el.get("placeholder") or
             el.get("text") or
@@ -358,6 +462,12 @@ def format_for_llm(elements: list[dict], context: str = "general") -> str:
                 line += f"  ⚠️ NOT UNIQUE (matches {el['css_matches']} elements — use XPATH)"
         if xpath:
             line += f"  |  XPATH → By.XPATH, '{xpath}'"
+            if el.get("xpath_matches"):
+                line += f"  ⚠️ NOT UNIQUE (matches {el['xpath_matches']} elements)"
+        if el.get("options"):
+            line += (f"  OPTIONS(sample): {el['options'][:8]}"
+                     f"{' …' if len(el['options']) > 8 else ''}"
+                     f" ← use option text EXACTLY as listed")
         lines.append(line)
 
     lines += [

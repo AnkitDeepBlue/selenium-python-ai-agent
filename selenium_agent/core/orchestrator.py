@@ -27,7 +27,7 @@ class Orchestrator:
         self,
         api_key: str = None,
         output_dir: str = "generated_tests",
-        max_heal_retries: int = 3,
+        max_heal_retries: int = 5,
         auto_heal: bool = True,
         provider: str = DEFAULT_PROVIDER,
         model: str | None = None,

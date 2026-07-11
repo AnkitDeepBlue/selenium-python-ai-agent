@@ -205,3 +205,65 @@ def test_healer_trim_output_keeps_tail():
     trimmed = healer._trim_output(output)
     assert trimmed.endswith("FAILURE_MARKER")
     assert len(trimmed) < 20000
+
+
+# ── link relevance ranking (generic — scores ANY instruction's words) ──
+
+
+def test_rank_links_prefers_instruction_relevant_pages():
+    from selenium_agent.selenium.locator_scanner import rank_links_by_relevance
+
+    links = [
+        {"href": "https://shop.com/search", "text": "Search"},
+        {"href": "https://shop.com/pages/about-us", "text": "About us"},
+        {"href": "https://shop.com/account/register", "text": "Sign up"},
+        {"href": "https://shop.com/account/login", "text": "Log in"},
+    ]
+    instruction = ("click the Sign up link to reach the Create Account form, "
+                   "fill it and click the Create button, then log out")
+    ranked = rank_links_by_relevance(links, instruction)
+
+    assert ranked[0] == "https://shop.com/account/register"
+    assert ranked.index("https://shop.com/account/login") < ranked.index("https://shop.com/search")
+
+
+def test_rank_links_works_for_a_completely_different_flow():
+    from selenium_agent.selenium.locator_scanner import rank_links_by_relevance
+
+    links = [
+        {"href": "https://shop.com/account/register", "text": "Sign up"},
+        {"href": "https://shop.com/collections/all", "text": "Catalog"},
+        {"href": "https://shop.com/cart", "text": "Cart"},
+    ]
+    ranked = rank_links_by_relevance(links, "add two items to the cart and checkout as guest")
+    assert ranked[0] == "https://shop.com/cart"
+
+
+def test_rank_links_keeps_document_order_when_nothing_matches():
+    from selenium_agent.selenium.locator_scanner import rank_links_by_relevance
+
+    links = [{"href": "https://a.com/x", "text": "X"}, {"href": "https://a.com/y", "text": "Y"}]
+    assert rank_links_by_relevance(links, "unrelated words entirely") == \
+        ["https://a.com/x", "https://a.com/y"]
+
+
+def test_validator_rejects_driver_fixture_in_test_file():
+    content = (
+        "import pytest\n"
+        "@pytest.fixture\n"
+        "def driver():\n    yield None\n"
+        "def test_a(driver):\n    pass\n"
+    )
+    result = validate_python("tests/test_a.py", content)
+    assert not result.valid
+    assert any("driver fixture" in e for e in result.errors)
+
+
+def test_validator_rejects_driverfactory_in_test_file():
+    content = (
+        "from selenium_agent.selenium.driver_factory import DriverFactory\n"
+        "def test_a():\n    d = DriverFactory.create()\n"
+    )
+    result = validate_python("tests/test_a.py", content)
+    assert not result.valid
+    assert any("DriverFactory" in e for e in result.errors)

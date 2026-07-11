@@ -24,6 +24,81 @@ from selenium.common.exceptions import (
 Locator = tuple[str, str]
 
 
+_EDITABLE_TAGS = {"input", "textarea", "select"}
+
+
+def _normalize_locator(locator) -> Locator:
+    """
+    Accept ('css selector', '#x') tuples AND bare selector strings.
+
+    LLM-generated fixes occasionally pass a raw string where a locator tuple
+    is expected; Selenium then unpacks the string character-by-character into
+    find_element(*locator) and crashes with a bizarre arity error. Treat a
+    bare string as a CSS selector (or XPath when it looks like one).
+    """
+    if isinstance(locator, str):
+        from selenium.webdriver.common.by import By
+        if locator.startswith(("/", "(", "./")):
+            return (By.XPATH, locator)
+        return (By.CSS_SELECTOR, locator)
+    return locator
+
+
+def _first_usable_element(locator: Locator, require_enabled: bool = False,
+                          prefer_editable: bool = False):
+    """
+    Expected condition: the first DISPLAYED (optionally enabled) element
+    matching the locator.
+
+    Real pages often contain duplicate matches for one selector — a desktop
+    form plus an off-canvas mobile drawer with the SAME element ids, or a
+    wrapper element sharing its id with the input nested inside it.
+    Selenium's stock conditions grab the first DOM match, which may be the
+    hidden twin or the non-editable wrapper, causing
+    ElementNotInteractable/InvalidElementState exceptions. This condition
+    considers every match and prefers, in order:
+      1. an editable form control (when prefer_editable — for type/clear)
+      2. an element laid out inside the viewport
+    """
+    locator = _normalize_locator(locator)
+
+    def _condition(driver):
+        candidates = []
+        for el in driver.find_elements(*locator):
+            try:
+                if el.is_displayed() and (not require_enabled or el.is_enabled()):
+                    candidates.append(el)
+            except StaleElementReferenceException:
+                continue
+        if not candidates:
+            return False
+
+        if prefer_editable and len(candidates) > 1:
+            editable = []
+            for el in candidates:
+                try:
+                    if el.tag_name.lower() in _EDITABLE_TAGS or \
+                            el.get_attribute("contenteditable") == "true":
+                        editable.append(el)
+                except StaleElementReferenceException:
+                    continue
+            if editable:
+                candidates = editable
+
+        if len(candidates) == 1:
+            return candidates[0]
+        try:
+            viewport_width = driver.execute_script("return window.innerWidth") or 0
+            for el in candidates:
+                rect = el.rect
+                if 0 <= rect.get("x", -1) < viewport_width:
+                    return el
+        except Exception:
+            pass
+        return candidates[0]
+    return _condition
+
+
 class BasePage:
     def __init__(self, driver: WebDriver, timeout: int = 10):
         self.driver = driver
@@ -54,23 +129,33 @@ class BasePage:
 
     def find(self, locator: Locator, timeout: int = None) -> WebElement:
         wait = WebDriverWait(self.driver, timeout or self.timeout)
-        return wait.until(EC.visibility_of_element_located(locator))
+        return wait.until(_first_usable_element(locator))
 
     def find_clickable(self, locator: Locator, timeout: int = None) -> WebElement:
         wait = WebDriverWait(self.driver, timeout or self.timeout)
-        return wait.until(EC.element_to_be_clickable(locator))
+        return wait.until(_first_usable_element(locator, require_enabled=True))
 
     def find_present(self, locator: Locator, timeout: int = None) -> WebElement:
         """Find element in DOM even if not visible (e.g. hidden inputs)."""
+        locator = _normalize_locator(locator)
         wait = WebDriverWait(self.driver, timeout or self.timeout)
         return wait.until(EC.presence_of_element_located(locator))
 
+    def find_editable(self, locator: Locator, timeout: int = None) -> WebElement:
+        """Find the editable form control for a locator — when a selector also
+        matches a wrapper/label twin, this picks the input/textarea/select."""
+        wait = WebDriverWait(self.driver, timeout or self.timeout)
+        return wait.until(_first_usable_element(
+            locator, require_enabled=True, prefer_editable=True))
+
     def find_all(self, locator: Locator, timeout: int = None) -> list[WebElement]:
+        locator = _normalize_locator(locator)
         wait = WebDriverWait(self.driver, timeout or self.timeout)
         wait.until(EC.presence_of_all_elements_located(locator))
         return self.driver.find_elements(*locator)
 
     def is_visible(self, locator: Locator, timeout: int = 3) -> bool:
+        locator = _normalize_locator(locator)
         try:
             WebDriverWait(self.driver, timeout).until(EC.visibility_of_element_located(locator))
             return True
@@ -78,6 +163,7 @@ class BasePage:
             return False
 
     def is_present(self, locator: Locator, timeout: int = 3) -> bool:
+        locator = _normalize_locator(locator)
         try:
             WebDriverWait(self.driver, timeout).until(EC.presence_of_element_located(locator))
             return True
@@ -106,7 +192,7 @@ class BasePage:
         self.type(locator, text)
         time.sleep(0.3)
 
-        el = self.find(locator)
+        el = self.find_editable(locator)
         actual = el.get_attribute("value") or ""
         if actual.strip() == text.strip():
             return self
@@ -117,13 +203,13 @@ class BasePage:
         self.execute_js("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", el)
         time.sleep(0.2)
 
-        actual = self.find(locator).get_attribute("value") or ""
+        actual = self.find_editable(locator).get_attribute("value") or ""
         assert actual.strip() == text.strip(), \
             f"Field empty after JS inject! expected='{text}', got='{actual}'"
         return self
 
     def type(self, locator: Locator, text: str, clear_first: bool = True) -> "BasePage":
-        element = self.find(locator)
+        element = self.find_editable(locator)
         element.click()  # click first — required for React/SPA forms
         if clear_first:
             element.clear()
@@ -131,25 +217,39 @@ class BasePage:
         return self
 
     def clear(self, locator: Locator) -> "BasePage":
-        element = self.find(locator)
+        element = self.find_editable(locator)
         element.send_keys(Keys.CONTROL + "a")
         element.send_keys(Keys.DELETE)
         return self
 
     def submit(self, locator: Locator) -> "BasePage":
-        self.find(locator).send_keys(Keys.RETURN)
+        self.find_editable(locator).send_keys(Keys.RETURN)
         return self
 
     def select_by_text(self, locator: Locator, text: str) -> "BasePage":
-        Select(self.find(locator)).select_by_visible_text(text)
+        select = Select(self.find_editable(locator))
+        try:
+            select.select_by_visible_text(text)
+        except NoSuchElementException:
+            # Option labels rarely match test data verbatim ("United States"
+            # vs "United States of America (the)") — fall back to the first
+            # option containing the requested text, case-insensitively.
+            wanted = text.strip().lower()
+            for option in select.options:
+                label = (option.text or "").strip()
+                if wanted in label.lower():
+                    select.select_by_visible_text(label)
+                    break
+            else:
+                raise
         return self
 
     def select_by_value(self, locator: Locator, value: str) -> "BasePage":
-        Select(self.find(locator)).select_by_value(value)
+        Select(self.find_editable(locator)).select_by_value(value)
         return self
 
     def select_by_index(self, locator: Locator, index: int) -> "BasePage":
-        Select(self.find(locator)).select_by_index(index)
+        Select(self.find_editable(locator)).select_by_index(index)
         return self
 
     # ── Getting Values ────────────────────────────
@@ -158,7 +258,7 @@ class BasePage:
         return self.find(locator).text
 
     def get_value(self, locator: Locator) -> str:
-        return self.find(locator).get_attribute("value") or ""
+        return self.find_editable(locator).get_attribute("value") or ""
 
     def get_attribute(self, locator: Locator, attribute: str) -> str:
         return self.find(locator).get_attribute(attribute) or ""
@@ -193,6 +293,7 @@ class BasePage:
         timeout: int = None,
         poll: float = 0.5,
     ) -> WebElement:
+        locator = _normalize_locator(locator)
         _timeout = timeout or self.timeout
         wait = FluentWebDriverWait(
             self.driver,
@@ -201,9 +302,9 @@ class BasePage:
             ignored_exceptions=[NoSuchElementException, StaleElementReferenceException],
         )
         _cond_map = {
-            "visible":   EC.visibility_of_element_located(locator),
+            "visible":   _first_usable_element(locator),
             "present":   EC.presence_of_element_located(locator),
-            "clickable": EC.element_to_be_clickable(locator),
+            "clickable": _first_usable_element(locator, require_enabled=True),
             "invisible": EC.invisibility_of_element_located(locator),
         }
         return wait.until(_cond_map.get(condition, _cond_map["visible"]))
@@ -219,11 +320,13 @@ class BasePage:
         return self
 
     def wait_for_invisible(self, locator: Locator, timeout: int = None) -> "BasePage":
+        locator = _normalize_locator(locator)
         WebDriverWait(self.driver, timeout or self.timeout).until(
             EC.invisibility_of_element_located(locator))
         return self
 
     def wait_for_text(self, locator: Locator, text: str, timeout: int = None) -> "BasePage":
+        locator = _normalize_locator(locator)
         WebDriverWait(self.driver, timeout or self.timeout).until(
             EC.text_to_be_present_in_element(locator, text))
         return self

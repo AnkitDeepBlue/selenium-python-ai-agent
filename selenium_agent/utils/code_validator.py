@@ -56,6 +56,20 @@ def validate_python(filename: str, content: str) -> ValidationResult:
             result.warnings.append("By import in a test file — locators belong in page objects")
         if re.search(r"\bBy\.[A-Z_]+\s*,", content):
             result.warnings.append("Raw locator tuple in a test file — move it to the page object")
+        # The driver fixture is deterministic framework scaffolding (conftest.py).
+        # LLM-invented fixtures/drivers are the #1 source of collection errors.
+        if re.search(r"def\s+driver\w*\s*\(", content):
+            result.valid = False
+            result.errors.append(
+                "Test file defines its own driver fixture — conftest.py already "
+                "provides `driver`; test functions must just accept it as a parameter"
+            )
+        if "DriverFactory" in content:
+            result.valid = False
+            result.errors.append(
+                "Test file imports/uses DriverFactory — drivers come only from "
+                "the conftest.py `driver` fixture"
+            )
 
     return result
 
