@@ -85,6 +85,13 @@ NoSuchElementException / TimeoutException
   → Wrong selector in page object. Fix the tuple value using DOM scan.
   → Change only the page object, not the test.
 
+TimeoutException on wait_for_url(...)
+  → The app probably does NOT navigate — SPAs show results on the SAME page.
+  → Do NOT increase the timeout. Remove wait_for_url and assert an in-page
+    success indicator instead: a status element from the DOM scan whose text
+    changes (e.g. a status badge), or a success message element.
+  → wait_for_text(locator, 'expected') is available on BasePage for this.
+
 AttributeError: method not found
   → Fix method call in test to use correct BasePage methods:
      self.fluent_wait(locator, 'visible'|'clickable'|'present'|'invisible')
@@ -96,6 +103,11 @@ AssertionError
   → Read the assertion and the actual value in the output. Decide whether the
     expectation is wrong (fix assertion) or the app state was not reached
     (fix waits / navigation before the assertion).
+  → DOM-scan text is the page's PRE-ACTION state. Never assert pre-action
+    text (e.g. "STANDBY") as the post-action outcome — assert the CHANGED
+    state the scenario expects (e.g. "AUTHENTICATED", a success message).
+  → When reading a "LABEL: value" element to use its value, strip the label:
+    value = page.get_text(LOCATOR).split(':', 1)[-1].strip()
 
 ImportError
   → Fix import path. Never add sys.path.

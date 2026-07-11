@@ -78,6 +78,24 @@ FORBIDDEN: putting page B's locators inside page A's class.
   page.safe_type(locator, text)  ← JS-fallback form input
   page.select_by_text(locator, text)   page.hover(locator)
 
+══ READING VALUES FROM THE PAGE ══
+
+  get_text() returns the FULL text of the element, including any label prefix.
+  When a "LABEL: value" element is read to USE its value, strip the label:
+
+    raw = page.get_text(page.SHOWN_USERNAME)          # "USERNAME: testuser"
+    username = raw.split(':', 1)[-1].strip()          # "testuser"
+
+══ ASSERTING OUTCOMES ══
+
+  Text captured in the DOM scan is the page's state BEFORE any action
+  (e.g. a status element showing "STANDBY" before login).
+  NEVER assert pre-action text as the expected outcome.
+  Assert what the scenario expects AFTER the action: a status element's text
+  CHANGES, a success/error message APPEARS, a new element becomes visible.
+  Many SPAs never navigate — verify in-page indicators, not URLs, unless the
+  plan explicitly says the URL changes.
+
 FORBIDDEN: find_element(), time.sleep(), get_driver(), DriverFactory.get_driver()
 
 PYTEST FIXTURE:

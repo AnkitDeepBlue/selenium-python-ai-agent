@@ -72,6 +72,9 @@ For flows that span multiple pages (login → inventory → cart → checkout �
   - Every scenario independent — no shared state between scenarios
   - Each scenario has explicit expected_result that a machine can assert
   - Use realistic test_data (from the instruction when given)
+  - DOM-scan text shows the page BEFORE any action. expected_result must
+    describe the state AFTER the action (what changes/appears), never the
+    pre-action text you saw in the scan
 
 OTHER RULES:
   - Use EXACT target URL — never example.com

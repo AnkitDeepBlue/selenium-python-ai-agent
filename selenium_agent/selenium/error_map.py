@@ -49,6 +49,22 @@ class SeleniumErrorMap:
         ),
 
         ErrorFix(
+            exception="TimeoutException (wait_for_url)",
+            pattern="wait_for_url",
+            cause="The URL never changed after the action — many SPAs show the result "
+                  "on the SAME page (status badge, toast, message) without navigating",
+            fix="Do NOT increase the timeout. Remove wait_for_url and instead assert an "
+                "in-page success indicator from the DOM scan (a status element whose text "
+                "changes, a success message, etc.)",
+            code_before="page.click(page.LOGIN_BUTTON)\npage.wait_for_url('dashboard')",
+            code_after="page.click(page.LOGIN_BUTTON)\n"
+                       "# SPA: success shows on the same page — assert the status element\n"
+                       "page.wait_for_text(page.LOGIN_STATUS, 'AUTHENTICATED')\n"
+                       "assert 'AUTHENTICATED' in page.get_text(page.LOGIN_STATUS)",
+            severity="high",
+        ),
+
+        ErrorFix(
             exception="TimeoutException",
             pattern="timeout",
             cause="Element did not appear within the wait timeout",

@@ -13,8 +13,10 @@ from selenium_agent.utils.logger import setup_logger
 logger = setup_logger("LocatorScanner")
 
 # ── JS: scan every interactive element → CSS + XPath ──────────────────────────
+# NOTE: the leading `return` is load-bearing — Selenium's execute_script only
+# hands the value back to Python if the script body explicitly returns it.
 _SCAN_JS = """
-(function () {
+return (function () {
     // ── XPath builder (relative, attribute-based — never absolute) ────────────
     function buildXPath(el) {
         const tag = el.tagName.toLowerCase();
@@ -68,6 +70,17 @@ _SCAN_JS = """
         return null;
     }
 
+    // ── Uniqueness helpers — a locator that matches several elements is a trap ──
+    function cssCount(sel) {
+        try { return document.querySelectorAll(sel).length; } catch (e) { return 0; }
+    }
+    function xpathCount(xp) {
+        try {
+            return document.evaluate('count(' + xp + ')', document, null,
+                XPathResult.NUMBER_TYPE, null).numberValue;
+        } catch (e) { return 0; }
+    }
+
     const INTERACTIVE = [
         'input', 'button', 'a[href]', 'select', 'textarea',
         '[role="button"]', '[role="link"]', '[role="textbox"]',
@@ -101,6 +114,16 @@ _SCAN_JS = """
             xpath:       xpath,
         };
 
+        // Annotate ambiguous selectors so the LLM never guesses wrong
+        if (css) {
+            const n = cssCount(css);
+            if (n > 1) info.css_matches = n;
+        }
+        if (xpath) {
+            const n = xpathCount(xpath);
+            if (n > 1) info.xpath_matches = n;
+        }
+
         const key = (css || '') + '|' + (xpath || '');
         if (key !== '|' && !seen.has(key)) {
             seen.add(key);
@@ -108,14 +131,82 @@ _SCAN_JS = """
         }
     });
 
+    // ── Text-bearing leaf elements (labels, displayed values, messages) ──
+    // Workflows often need to READ text from the page ("grab the username
+    // shown in the credentials section"). Capture a bounded set of short
+    // leaf text elements so the LLM has real locators for them too.
+    const TEXTY = 'p, span, label, h1, h2, h3, h4, h5, h6, td, th, li, code, pre, strong, b, div[id]';
+    let textCount = 0;
+    document.querySelectorAll(TEXTY).forEach(function (el) {
+        if (textCount >= 30) return;
+        if (el.children.length !== 0) return;
+        const txt = (el.textContent || '').trim();
+        if (txt.length < 3 || txt.length > 80) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        const tag = el.tagName.toLowerCase();
+        let css = null;
+        if (el.getAttribute('data-test'))
+            css = '[data-test="' + el.getAttribute('data-test') + '"]';
+        else if (el.getAttribute('data-testid'))
+            css = '[data-testid="' + el.getAttribute('data-testid') + '"]';
+        else if (el.id)
+            css = '#' + el.id;
+        else if (typeof el.className === 'string' && el.className.trim())
+            css = tag + '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.');
+
+        // A CSS that matches several elements is worse than none —
+        // reading text through it silently returns the WRONG element.
+        if (css && cssCount(css) !== 1) css = null;
+
+        let xpath = null;
+        if (txt.indexOf('"') === -1) {
+            // "LABEL: value" pattern → anchor on the stable label part so the
+            // locator survives when the value changes (status badges, etc.)
+            const colon = txt.indexOf(':');
+            if (colon > 0 && colon < 40) {
+                const prefixXp = '//' + tag + '[contains(normalize-space(), "'
+                                 + txt.slice(0, colon + 1) + '")]';
+                if (xpathCount(prefixXp) === 1) xpath = prefixXp;
+            }
+            if (!xpath) {
+                const exactXp = '//' + tag + '[normalize-space()="' + txt + '"]';
+                if (xpathCount(exactXp) === 1) xpath = exactXp;
+            }
+        }
+
+        if (!css && !xpath) return;
+        const key = 'txt|' + (css || '') + '|' + txt;
+        if (seen.has(key)) return;
+        seen.add(key);
+        textCount++;
+        results.push({
+            tag: tag, kind: 'text', href: null, type: null,
+            id: el.id || null, name: null, placeholder: null,
+            text: txt.slice(0, 60),
+            data_test: el.getAttribute('data-test') || null,
+            data_testid: el.getAttribute('data-testid') || null,
+            data_cy: null, aria_label: null,
+            css: css, xpath: xpath,
+        });
+    });
+
     return results;
 })();
 """
 
 
-def scan_page_locators(url: str, headless: bool = True) -> list[dict]:
+def scan_page_locators(url: str, headless: bool = True, max_wait: int = 25) -> list[dict]:
     """
     Open browser, navigate to url, scan DOM, return elements with real CSS + XPath.
+
+    SPA-aware: client-side apps (React/Vue/Angular) render the form long after
+    document.readyState is 'complete' — some behind boot animations where
+    elements exist in the DOM but are still zero-sized. So instead of one shot,
+    the scan JS is POLLED every second until visible interactive elements
+    appear (up to max_wait seconds).
+
     Returns [] on any failure — callers handle gracefully.
     """
     try:
@@ -130,8 +221,7 @@ def scan_page_locators(url: str, headless: bool = True) -> list[dict]:
         driver.get(url)
 
         from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.common.by import By
+        import time
 
         # Wait for full page load
         WebDriverWait(driver, 10).until(
@@ -140,7 +230,6 @@ def scan_page_locators(url: str, headless: bool = True) -> list[dict]:
 
         # Wait for redirect to settle — URL stops changing
         initial_url = driver.current_url
-        import time
         time.sleep(1.5)
         final_url = driver.current_url
         if final_url != initial_url:
@@ -148,19 +237,24 @@ def scan_page_locators(url: str, headless: bool = True) -> list[dict]:
             WebDriverWait(driver, 10).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
-            time.sleep(1)  # extra wait for React to render after redirect
 
-        # Wait for at least one interactive element (React may need extra time)
-        try:
-            WebDriverWait(driver, 12).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR,
-                    "input, button, a[href], [role='button'], [type='submit']"))
-            )
-            import time as _t; _t.sleep(1)  # let remaining React elements render
-        except Exception:
-            pass
+        # Poll until VISIBLE interactive elements render (SPA hydration,
+        # boot animations, lazy data fetches)
+        deadline = time.time() + max_wait
+        elements: list[dict] = []
+        while time.time() < deadline:
+            elements = driver.execute_script(_SCAN_JS) or []
+            if elements:
+                # settle pass — catch elements that render moments later
+                time.sleep(1.0)
+                more = driver.execute_script(_SCAN_JS) or []
+                if len(more) > len(elements):
+                    elements = more
+                break
+            time.sleep(1.0)
 
-        elements = driver.execute_script(_SCAN_JS) or []
+        if not elements:
+            logger.warning(f"⚠️  No visible interactive elements after {max_wait}s on: {driver.current_url}")
         logger.info(f"✅ {len(elements)} interactive elements found on: {driver.current_url}")
         return elements
 
@@ -260,6 +354,8 @@ def format_for_llm(elements: list[dict], context: str = "general") -> str:
         line = f"  [{label[:40]}]"
         if css:
             line += f"  CSS  → By.CSS_SELECTOR, '{css}'"
+            if el.get("css_matches"):
+                line += f"  ⚠️ NOT UNIQUE (matches {el['css_matches']} elements — use XPATH)"
         if xpath:
             line += f"  |  XPATH → By.XPATH, '{xpath}'"
         lines.append(line)
@@ -267,7 +363,9 @@ def format_for_llm(elements: list[dict], context: str = "general") -> str:
     lines += [
         "",
         "RULES:",
-        "  • Prefer CSS over XPath",
+        "  • Prefer CSS over XPath — but NEVER use a CSS marked NOT UNIQUE",
+        "    for a single element (it silently returns the WRONG element);",
+        "    use that element's XPATH instead",
         "  • Use XPath only when CSS cannot express the condition",
         "  • NEVER invent locators not listed above",
         "",
