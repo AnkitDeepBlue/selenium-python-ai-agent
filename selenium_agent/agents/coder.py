@@ -145,6 +145,15 @@ from selenium_agent.selenium.driver_factory import DriverFactory
 
 HEADLESS = __HEADLESS__
 
+# Markers/tags used by the generated tests — registered automatically so
+# `pytest -m <marker>` works cleanly, no pytest.ini needed.
+MARKERS = __MARKERS__
+
+
+def pytest_configure(config):
+    for marker in MARKERS:
+        config.addinivalue_line("markers", f"{marker}: tagged by selenium-agent")
+
 
 @pytest.fixture(scope="function")
 def driver():
@@ -339,8 +348,19 @@ class CoderAgent:
             saved.append(str(filepath))
             logger.info(f"✅ Created: {filepath}")
 
-        self._write_conftest(project_profile, headless=plan.get("headless", False))
+        self._write_conftest(project_profile, headless=plan.get("headless", False),
+                             markers=self._collect_markers(plan))
         return saved
+
+    @staticmethod
+    def _collect_markers(plan: dict) -> list[str]:
+        """Union of plan-level pytest markers and BDD scenario tags."""
+        markers = set(plan.get("pytest_markers") or [])
+        for scenario in (plan.get("scenarios") or plan.get("test_scenarios") or []):
+            for tag in scenario.get("tags") or []:
+                markers.add(str(tag).lstrip("@"))
+        markers.add("smoke")  # agents tag critical-path tests with @smoke by convention
+        return sorted(markers)
 
     # ── Prompt building ────────────────────────────────────────────────
 
@@ -456,14 +476,15 @@ class CoderAgent:
         code = re.sub(r'URL\s*=\s*([\'"])([^\'"]+)\1', fix_url_const, code)
         return code
 
-    def _write_conftest(self, project_profile=None, headless: bool = False):
+    def _write_conftest(self, project_profile=None, headless: bool = False,
+                        markers: list[str] | None = None):
         if project_profile and project_profile.has_conftest:
             logger.info("⏭️  Skipping conftest.py — already exists")
             return
         conftest_path = Path(self.output_dir) / "conftest.py"
         conftest_path.parent.mkdir(parents=True, exist_ok=True)
-        conftest_path.write_text(
-            CONFTEST_CONTENT.replace("__HEADLESS__", str(bool(headless))),
-            encoding="utf-8",
-        )
+        content = (CONFTEST_CONTENT
+                   .replace("__HEADLESS__", str(bool(headless)))
+                   .replace("__MARKERS__", repr(sorted(set(markers or ["smoke"])))))
+        conftest_path.write_text(content, encoding="utf-8")
         logger.info(f"✅ Created: {conftest_path}")

@@ -267,3 +267,25 @@ def test_validator_rejects_driverfactory_in_test_file():
     result = validate_python("tests/test_a.py", content)
     assert not result.valid
     assert any("DriverFactory" in e for e in result.errors)
+
+
+# ── conftest scaffolding ───────────────────────────────────────────────
+
+
+def test_conftest_registers_plan_markers(tmp_path: Path):
+    from selenium_agent.agents.coder import CoderAgent
+
+    coder = CoderAgent.__new__(CoderAgent)
+    coder.output_dir = str(tmp_path)
+
+    plan = {
+        "pytest_markers": ["smoke"],
+        "scenarios": [{"tags": ["@e2e", "checkout"]}],
+    }
+    coder._write_conftest(headless=True, markers=coder._collect_markers(plan))
+
+    content = (tmp_path / "conftest.py").read_text()
+    assert "HEADLESS = True" in content
+    assert "def pytest_configure(config):" in content
+    assert "'checkout'" in content and "'e2e'" in content and "'smoke'" in content
+    assert "def driver():" in content
