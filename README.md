@@ -61,9 +61,12 @@ selenium-agent config --show
 
 ### 4. Generate & Run Tests
 
+Describe **any workflow on any web app** in plain English — the examples below are just examples:
+
 ```bash
 # Full flow: plan → generate → heal (default)
 selenium-agent "test the login page"
+selenium-agent "add an item to cart and checkout as guest" --url https://your-app.com
 
 # Plan first, review, then generate (Playwright-agents workflow)
 selenium-agent --plan-only "test the checkout flow"
@@ -103,17 +106,34 @@ Then, inside Claude Code:
 
 ### Generate Tests (Main Command)
 
+The instruction is **free-form natural language** — it works for **any application and any workflow**, not just login pages. The planner opens *your* URL in a real browser and builds the plan from your app's actual DOM.
+
 ```bash
-selenium-agent "test the login page"                    # uses saved config + URL
-selenium-agent "test login page of saucedemo.com"       # URL auto-detected
-selenium-agent "test login" --url https://staging.myapp.com   # override once
-selenium-agent "test the login page" --no-heal          # generate only
-selenium-agent "test the login page" --mode bdd         # Gherkin .feature files
-selenium-agent "test the login page" --headless
-selenium-agent "test checkout" --explore 3              # scan 3 extra same-origin pages
-selenium-agent "test the login page" --output-dir my_tests/
-selenium-agent "test the login page" --project /path/to/project   # fit existing project
-selenium-agent "test the login page" --max-retries 5
+selenium-agent "<describe any workflow to test>" --url <your-app-url>
+```
+
+Example instructions (any app, any flow):
+
+```bash
+selenium-agent "test the login page"                                  # uses saved config + URL
+selenium-agent "search for 'laptop' and verify results show prices" --url https://demo.opencart.com
+selenium-agent "register a new account and verify the welcome banner" --url https://myapp.internal
+selenium-agent "fill the contact form and verify the thank-you message" --url https://mycompany.com/contact
+selenium-agent "login as admin, create an invoice and verify it appears in the list" --url https://erp.mycompany.com
+selenium-agent "add two items to cart, remove one, then checkout as guest" --url https://shop.example.org
+```
+
+Flags (combine with any instruction):
+
+```bash
+selenium-agent "..." --url https://staging.myapp.com   # override saved URL once
+selenium-agent "..." --no-heal                         # generate only, skip healing
+selenium-agent "..." --mode bdd                        # Gherkin .feature files
+selenium-agent "..." --headless                        # no visible browser
+selenium-agent "..." --explore 3                       # scan 3 extra same-origin pages
+selenium-agent "..." --output-dir my_tests/            # custom output folder
+selenium-agent "..." --project /path/to/project        # fit into YOUR existing framework
+selenium-agent "..." --max-retries 5                   # more healer attempts
 ```
 
 ### `--plan-only` — Preview & Persist the Test Plan
