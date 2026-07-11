@@ -22,12 +22,18 @@ def resolve_input_path(file_path: str, output_dir: str) -> Path:
     if candidate.is_absolute():
         return candidate.resolve()
 
+    output_root = get_output_root(output_dir)
+
+    # Paths that already include the output_dir prefix resolve against it
+    # first — avoids the CWD accidentally shadowing the intended target.
+    if candidate.parts and candidate.parts[0] == output_root.name:
+        prefixed = (output_root.parent / candidate).resolve()
+        if prefixed.exists():
+            return prefixed
+
     if candidate.exists():
         return candidate.resolve()
 
-    output_root = get_output_root(output_dir)
-
-    # Support caller-provided paths that already include the output_dir prefix.
     if candidate.parts and candidate.parts[0] == output_root.name:
         return (output_root.parent / candidate).resolve()
 

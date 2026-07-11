@@ -15,3 +15,4 @@ build/
 *.log
 allure-results/
 allure-report/
+.selenium-agent.json

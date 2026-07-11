@@ -9,6 +9,7 @@ from selenium_agent.utils.llm import (
     resolve_api_key,
 )
 from selenium_agent.utils.paths import get_output_root, resolve_input_path, safe_output_path
+from selenium_agent.utils import config_manager
 
 __all__ = [
     "DEFAULT_PROVIDER",
