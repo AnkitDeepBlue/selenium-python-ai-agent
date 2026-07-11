@@ -412,17 +412,21 @@ class CoderAgent:
         )
 
     def _token_budget(self, plan: dict) -> int:
+        """
+        Output-size budget from the plan's STRUCTURE (pages, scenarios,
+        locators) — never from keywords: common English words like "then"
+        or "navigate" appear in almost every plan and mislabel simple
+        flows as complex. max_tokens is a cap, not a target, but the
+        label should still be honest.
+        """
         scenarios = len(plan.get("test_scenarios") or plan.get("scenarios", []))
         page_objects = len(plan.get("page_objects_needed", []))
-        complex_kw = ["checkout", "cart", "logout", "navigate", "flow", "then", "after"]
-        is_complex = (
-            scenarios > 2 or page_objects > 2
-            or sum(1 for kw in complex_kw if kw in json.dumps(plan).lower()) >= 2
-        )
+        locators = len(plan.get("locators", []))
+        is_complex = scenarios > 2 or page_objects > 2 or locators > 12
         max_tokens = 12000 if is_complex else 6000
         logger.info(
             f"📐 Scenarios: {scenarios} | Pages: {page_objects} | "
-            f"complex: {is_complex} | max_tokens: {max_tokens}"
+            f"Locators: {locators} | complex: {is_complex} | max_tokens: {max_tokens}"
         )
         return max_tokens
 

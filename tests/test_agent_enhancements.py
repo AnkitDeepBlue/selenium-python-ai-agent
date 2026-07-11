@@ -311,3 +311,25 @@ def test_healer_green_requires_actual_passes():
     assert not green(True, "SKIPPED [1] x.py: Pending: locators\n1 passed, 1 skipped")  # pending placeholder
     assert not green(False, "===== 2 passed, 1 failed =====")          # non-zero exit
     assert green(True, "===== 2 passed, 1 deselected in 5s =====")
+
+
+def test_token_budget_uses_structure_not_keywords():
+    from selenium_agent.agents.coder import CoderAgent
+
+    coder = CoderAgent.__new__(CoderAgent)
+
+    # Simple login plan — English words like "then/navigate" must NOT flag it
+    simple = {
+        "test_scenarios": [{"steps": ["open page", "then navigate after login"]}],
+        "page_objects_needed": ["LoginPage", "InventoryPage"],
+        "locators": [{"css": "#a"}, {"css": "#b"}],
+    }
+    assert coder._token_budget(simple) == 6000
+
+    # Structurally big plan → complex
+    big = {
+        "test_scenarios": [{}],
+        "page_objects_needed": ["A", "B", "C", "D"],
+        "locators": [],
+    }
+    assert coder._token_budget(big) == 12000
