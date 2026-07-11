@@ -333,3 +333,15 @@ def test_token_budget_uses_structure_not_keywords():
         "locators": [],
     }
     assert coder._token_budget(big) == 12000
+
+
+def test_infer_provider_from_model_name():
+    from selenium_agent.utils.llm import infer_provider_for_model
+
+    assert infer_provider_for_model("gpt-5") == "openai"
+    assert infer_provider_for_model("gpt-4o-mini") == "openai"
+    assert infer_provider_for_model("o3-mini") == "openai"
+    assert infer_provider_for_model("claude-fable-5") == "anthropic"
+    assert infer_provider_for_model("claude-sonnet-5") == "anthropic"
+    assert infer_provider_for_model("some-unknown-model") is None
+    assert infer_provider_for_model(None) is None

@@ -220,6 +220,16 @@ Other examples:
         "mode":     args.mode,
     })
 
+    # `--model gpt-5` without `--provider` must not hit the default
+    # (Anthropic) API — the model name itself tells us the provider.
+    # An explicit --provider flag always wins.
+    if args.provider is None and cfg.get("model"):
+        from selenium_agent.utils.llm import infer_provider_for_model
+        inferred = infer_provider_for_model(cfg["model"])
+        if inferred and inferred != cfg.get("provider"):
+            logger.info(f"🧭 Model '{cfg['model']}' implies provider '{inferred}'")
+            cfg["provider"] = inferred
+
     # URL priority: --url flag > extracted from instruction > saved base_url
     from selenium_agent.utils.url_extractor import extract_url
     override_url = args.url

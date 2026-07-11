@@ -37,6 +37,26 @@ _NON_RETRYABLE = (
 )
 
 
+def infer_provider_for_model(model: str | None) -> str | None:
+    """
+    Infer the provider from a model name — 'gpt-5' implies OpenAI,
+    'claude-fable-5' implies Anthropic.
+
+    Fresh installs have no saved config, so `--model gpt-5` without
+    `--provider openai` would otherwise send an OpenAI model to the
+    default (Anthropic) API and fail with a confusing auth/model error.
+    Returns None when the name matches no known family.
+    """
+    if not model:
+        return None
+    m = model.strip().lower()
+    if m.startswith(("gpt-", "o1", "o3", "o4", "chatgpt")):
+        return "openai"
+    if m.startswith("claude"):
+        return "anthropic"
+    return None
+
+
 def normalize_provider(provider: str | None) -> str:
     normalized = (provider or DEFAULT_PROVIDER).strip().lower()
     if normalized not in API_KEY_ENV_VARS:
