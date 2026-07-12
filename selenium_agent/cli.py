@@ -27,6 +27,8 @@ def _handle_config(argv):
     p.add_argument("--headless",    dest="headless", action="store_true",  default=None)
     p.add_argument("--no-headless", dest="headless", action="store_false", default=None)
     p.add_argument("--mode",     choices=["pytest", "bdd"])
+    p.add_argument("--project",  help="Existing project to fit tests into "
+                                      "(use 'none' to clear)")
     p.add_argument("--show",     action="store_true", help="Print current config")
     args = p.parse_args(argv)
 
@@ -34,6 +36,9 @@ def _handle_config(argv):
         print("\n📋 Current config:")
         print(json.dumps(config_manager.load(), indent=2))
         return
+
+    if args.project and args.project.lower() in ("none", "clear", "off"):
+        args.project = ""  # empty string clears it (consumers treat "" as unset)
 
     updates = {k: v for k, v in vars(args).items() if v is not None and k != "show"}
     if not updates:
@@ -115,8 +120,8 @@ def _handle_help():
   --headless    headless browser
   --explore N   scan N extra same-origin pages while planning
   --output-dir  where to save files         (default: generated_tests)
-  --project     path to existing project
-  --max-retries healer retries              (default: 3)
+  --project     existing project path      (auto-saved to config)
+  --max-retries healer retries              (default: 5)
   --no-heal     skip healing
   --plan-only   preview plan only (saved to specs/)
   --from-plan   generate from saved plan JSON
@@ -196,7 +201,7 @@ Other examples:
     parser.add_argument("--test",          default=None, metavar="TEST_NAME",
                         help="Specific test function to run/heal. "
                              "e.g. --test test_login_locked_out_user")
-    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.0")
+    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.1")
 
     args = parser.parse_args()
 
@@ -210,6 +215,11 @@ Other examples:
         except Exception as e:
             print(f"❌ Scan failed: {e}")
             sys.exit(1)
+        # Remember the project — future runs fit into it automatically,
+        # no need to repeat --project every time.
+        config_manager.save({"project": args.scan})
+        print(f"\n💾 Project saved to config — future runs will fit into it.")
+        print(f"   (change: selenium-agent config --project <path> | clear: --project none)")
         sys.exit(0)
 
     # ── Merge config + CLI args ───────────────────────────────────────
@@ -245,6 +255,14 @@ Other examples:
         config_manager.save({"base_url": args.url})
         logger.info(f"💾 base_url saved: {args.url}")
 
+    # Project priority: --project flag > saved config. Persist like --url.
+    project_root = args.project or (cfg.get("project") or None)
+    if args.project and args.project != cfg.get("project"):
+        config_manager.save({"project": args.project})
+        logger.info(f"💾 project saved: {args.project}")
+    elif not args.project and project_root:
+        logger.info(f"🏗️  Using saved project: {project_root}")
+
     # ── Build orchestrator ────────────────────────────────────────────
     try:
         agent = Orchestrator(
@@ -255,7 +273,7 @@ Other examples:
             max_heal_retries=args.max_retries or 5,
             auto_heal=not args.no_heal,
             mode=cfg["mode"],
-            project_root=args.project,
+            project_root=project_root,
             headless=cfg["headless"],
             explore_pages=args.explore,
         )

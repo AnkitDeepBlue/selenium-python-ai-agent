@@ -1,0 +1,83 @@
+{
+  "mode": "pytest",
+  "url": "https://www.saucedemo.com",
+  "browser": "chrome",
+  "headless": false,
+  "test_scenarios": [
+    {
+      "id": "TC001",
+      "name": "Successful Login",
+      "description": "Verify that a user can successfully log in with valid credentials.",
+      "steps": [
+        "open LoginPage.URL",
+        "type USERNAME_INPUT on LoginPage",
+        "type PASSWORD_INPUT on LoginPage",
+        "click LOGIN_BUTTON on LoginPage",
+        "wait_for_url('/inventory.html')"
+      ],
+      "expected_result": "User is redirected to the inventory page.",
+      "test_data": {
+        "username": "standard_user",
+        "password": "secret_sauce"
+      }
+    },
+    {
+      "id": "TC002",
+      "name": "Unsuccessful Login with Invalid Credentials",
+      "description": "Verify that a user cannot log in with invalid credentials.",
+      "steps": [
+        "open LoginPage.URL",
+        "type USERNAME_INPUT on LoginPage",
+        "type INVALID_PASSWORD_INPUT on LoginPage",
+        "click LOGIN_BUTTON on LoginPage",
+        "wait_for_url('/')"
+      ],
+      "expected_result": "Error message is displayed and user remains on the login page.",
+      "test_data": {
+        "username": "standard_user",
+        "password": "wrong_password"
+      }
+    }
+  ],
+  "page_objects_needed": [
+    "LoginPage"
+  ],
+  "locators": [
+    {
+      "page_object": "LoginPage",
+      "element": "Username input field",
+      "css": "input[data-test='username']",
+      "xpath": "",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "Password input field",
+      "css": "input[data-test='password']",
+      "xpath": "",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "Login button",
+      "css": "input[data-test='login-button']",
+      "xpath": "",
+      "preferred": "css",
+      "wait_condition": "clickable"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "Error message",
+      "css": "h3[data-test='error']",
+      "xpath": "",
+      "preferred": "css",
+      "wait_condition": "visible"
+    }
+  ],
+  "pytest_markers": [
+    "smoke"
+  ],
+  "notes": ""
+}

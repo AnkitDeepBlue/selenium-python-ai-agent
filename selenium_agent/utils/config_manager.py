@@ -23,6 +23,7 @@ DEFAULTS = {
     "headless":  False,
     "mode":      "pytest",
     "base_url":  None,   # persisted across runs — no need to pass --url repeatedly
+    "project":   None,   # persisted by --scan/--project — fit into this project automatically
 }
 
 

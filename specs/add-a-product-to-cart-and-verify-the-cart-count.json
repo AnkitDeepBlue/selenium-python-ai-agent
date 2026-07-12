@@ -1,0 +1,48 @@
+{
+  "mode": "pytest",
+  "url": "https://demo.opencart.com",
+  "browser": "chrome",
+  "headless": false,
+  "test_scenarios": [
+    {
+      "id": "TC001",
+      "name": "Add Product to Cart and Verify Cart Count",
+      "description": "This test verifies that a product can be added to the cart and the cart count is updated accordingly.",
+      "steps": [
+        "open https://demo.opencart.com",
+        "click the product link on the main page",
+        "click 'Add to Cart' button on ProductPage",
+        "wait_for_url('cart')",
+        "verify cart count is '1'"
+      ],
+      "expected_result": "The product is added to the cart and the cart count is updated to '1'.",
+      "test_data": {}
+    }
+  ],
+  "page_objects_needed": [
+    "ProductPage",
+    "CartPage"
+  ],
+  "locators": [
+    {
+      "page_object": "ProductPage",
+      "element": "Add to Cart button",
+      "css": ".btn-add-to-cart",
+      "xpath": "//button[normalize-space()='Add to Cart']",
+      "preferred": "xpath",
+      "wait_condition": "clickable"
+    },
+    {
+      "page_object": "CartPage",
+      "element": "Cart Count",
+      "css": ".cart-count",
+      "xpath": "//span[@class='cart-count']",
+      "preferred": "xpath",
+      "wait_condition": "visible"
+    }
+  ],
+  "pytest_markers": [
+    "smoke"
+  ],
+  "notes": ""
+}

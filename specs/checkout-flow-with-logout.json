@@ -1,0 +1,162 @@
+{
+  "mode": "bdd",
+  "url": "https://www.saucedemo.com",
+  "feature_name": "Checkout flow with logout",
+  "feature_title": "User can purchase a product and logout",
+  "role": "authenticated shopper",
+  "goal": "log in, add a product to cart, complete checkout, see confirmation, and logout",
+  "benefit": "validate core purchase path and session termination",
+  "browser": "chrome",
+  "headless": false,
+  "scenarios": [
+    {
+      "id": "TC001",
+      "name": "Happy path: Login, add Sauce Labs Backpack, checkout to completion, and logout",
+      "tags": [
+        "smoke",
+        "e2e",
+        "checkout"
+      ],
+      "steps": [
+        {
+          "type": "Given",
+          "text": "I am on the Login page at https://www.saucedemo.com"
+        },
+        {
+          "type": "When",
+          "text": "I safe_type(LoginPage, LoginPage.USERNAME_INPUT, \"standard_user\")"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type(LoginPage, LoginPage.PASSWORD_INPUT, \"secret_sauce\")"
+        },
+        {
+          "type": "And",
+          "text": "I click the LoginPage.LOGIN_BUTTON"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/inventory.html\")"
+        },
+        {
+          "type": "When",
+          "text": "On the Inventory page, I click the Add to cart button for product \"Sauce Labs Backpack\""
+        },
+        {
+          "type": "And",
+          "text": "I click the cart icon to open the Cart page"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/cart.html\")"
+        },
+        {
+          "type": "And",
+          "text": "I should see the product line item \"Sauce Labs Backpack\" listed in the cart"
+        },
+        {
+          "type": "When",
+          "text": "I click the Checkout button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/checkout-step-one.html\")"
+        },
+        {
+          "type": "When",
+          "text": "I safe_type(CheckoutInformationPage, CheckoutInformationPage.FIRST_NAME_INPUT, <first_name>)"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type(CheckoutInformationPage, CheckoutInformationPage.LAST_NAME_INPUT, <last_name>)"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type(CheckoutInformationPage, CheckoutInformationPage.POSTAL_CODE_INPUT, <postal_code>)"
+        },
+        {
+          "type": "And",
+          "text": "I click the Continue button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/checkout-step-two.html\")"
+        },
+        {
+          "type": "And",
+          "text": "I should see the order summary contains product \"Sauce Labs Backpack\""
+        },
+        {
+          "type": "When",
+          "text": "I click the Finish button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/checkout-complete.html\")"
+        },
+        {
+          "type": "And",
+          "text": "I should see the confirmation message \"Thank you for your order!\""
+        },
+        {
+          "type": "When",
+          "text": "I open the burger menu"
+        },
+        {
+          "type": "And",
+          "text": "I click Logout"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url(\"/\")"
+        },
+        {
+          "type": "And",
+          "text": "I should see the Login page username, password fields and login button visible"
+        }
+      ],
+      "test_data": {
+        "username": "standard_user",
+        "password": "secret_sauce",
+        "product_name": "Sauce Labs Backpack",
+        "first_name": "GENERATE_UNIQUE_AT_RUNTIME",
+        "last_name": "GENERATE_UNIQUE_AT_RUNTIME",
+        "postal_code": "GENERATE_UNIQUE_AT_RUNTIME"
+      },
+      "expected_result": "User is logged in, product 'Sauce Labs Backpack' is purchased successfully with confirmation message displayed, and user is logged out and returned to the login page."
+    }
+  ],
+  "page_objects_needed": [
+    "LoginPage",
+    "InventoryPage",
+    "CartPage",
+    "CheckoutInformationPage",
+    "CheckoutOverviewPage",
+    "CheckoutCompletePage",
+    "MenuPage"
+  ],
+  "locators": [
+    {
+      "page_object": "LoginPage",
+      "element": "USERNAME_INPUT",
+      "css": "[data-test=\"username\"]",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "PASSWORD_INPUT",
+      "css": "[data-test=\"password\"]",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "LOGIN_BUTTON",
+      "css": "[data-test=\"login-button\"]",
+      "preferred": "css",
+      "wait_condition": "clickable"
+    }
+  ],
+  "notes": "Important: This plan enforces separate page objects for each page in the flow. Use fluent_wait for elements (visible for inputs, clickable for buttons/links), and call wait_for_url() after each navigation action as shown in steps. Only the Login page DOM locators were provided by the scan; before implementation, perform a DOM scan on Inventory, Cart, Checkout Step One, Checkout Step Two, Checkout Complete, and the Menu to capture their data-test or id-based selectors. Do not invent locators. For form fields on CheckoutInformationPage, use safe_type() to ensure React inputs are populated reliably. No time.sleep() should be used; rely on fluent waits and loader invisibility if loaders exist. Each test run must generate unique first name, last name, and postal code values at runtime to avoid collisions in test data storage and logs."
+}

@@ -1,0 +1,166 @@
+{
+  "mode": "bdd",
+  "url": "https://www.saucedemo.com",
+  "feature_name": "E2E Checkout and Logout",
+  "feature_title": "Complete purchase of Sauce Labs Backpack and logout",
+  "role": "E2E web shopper",
+  "goal": "Log in, add product to cart, complete checkout, verify confirmation, and logout",
+  "benefit": "Validates the core purchase flow and session termination",
+  "browser": "chrome",
+  "headless": false,
+  "scenarios": [
+    {
+      "id": "TC001",
+      "name": "Login, purchase Sauce Labs Backpack, verify confirmation, and logout",
+      "tags": [
+        "smoke",
+        "e2e",
+        "checkout"
+      ],
+      "steps": [
+        {
+          "type": "Given",
+          "text": "I am on the Login page at https://www.saucedemo.com"
+        },
+        {
+          "type": "And",
+          "text": "I wait until the Username and Password fields are visible"
+        },
+        {
+          "type": "When",
+          "text": "I safe_type the username 'standard_user' into the Username field"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type the password 'secret_sauce' into the Password field"
+        },
+        {
+          "type": "And",
+          "text": "I click the Login button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to contain 'inventory.html'"
+        },
+        {
+          "type": "When",
+          "text": "I add the product 'Sauce Labs Backpack' to the cart on the Inventory page"
+        },
+        {
+          "type": "And",
+          "text": "I click the Cart icon to open the cart"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to contain 'cart.html'"
+        },
+        {
+          "type": "And",
+          "text": "I should see 'Sauce Labs Backpack' listed in the cart"
+        },
+        {
+          "type": "When",
+          "text": "I click the Checkout button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to contain 'checkout-step-one.html'"
+        },
+        {
+          "type": "When",
+          "text": "I safe_type a random First Name into the First Name field"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type a random Last Name into the Last Name field"
+        },
+        {
+          "type": "And",
+          "text": "I safe_type a random Postal Code into the Postal Code field"
+        },
+        {
+          "type": "And",
+          "text": "I click the Continue button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to contain 'checkout-step-two.html'"
+        },
+        {
+          "type": "And",
+          "text": "I should see 'Sauce Labs Backpack' in the Order Summary"
+        },
+        {
+          "type": "When",
+          "text": "I click the Finish button"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to contain 'checkout-complete.html'"
+        },
+        {
+          "type": "And",
+          "text": "I should see the confirmation message 'Thank you for your order!'"
+        },
+        {
+          "type": "When",
+          "text": "I open the burger menu"
+        },
+        {
+          "type": "And",
+          "text": "I click Logout"
+        },
+        {
+          "type": "Then",
+          "text": "I wait_for_url to equal 'https://www.saucedemo.com/' or contain 'saucedemo.com' without a path"
+        },
+        {
+          "type": "And",
+          "text": "I should see the Login button visible on the Login page"
+        }
+      ],
+      "test_data": {
+        "username": "standard_user",
+        "password": "secret_sauce",
+        "product_name": "Sauce Labs Backpack",
+        "first_name": "GENERATE_UNIQUE_AT_RUNTIME",
+        "last_name": "GENERATE_UNIQUE_AT_RUNTIME",
+        "postal_code": "GENERATE_UNIQUE_AT_RUNTIME"
+      },
+      "expected_result": "User successfully completes checkout of 'Sauce Labs Backpack', sees 'Thank you for your order!' on the checkout complete page, then logs out and is returned to the login page with the login elements visible."
+    }
+  ],
+  "page_objects_needed": [
+    "LoginPage",
+    "InventoryPage",
+    "CartPage",
+    "CheckoutInformationPage",
+    "CheckoutOverviewPage",
+    "CheckoutCompletePage",
+    "MenuPage"
+  ],
+  "locators": [
+    {
+      "page_object": "LoginPage",
+      "element": "Username input",
+      "css": "[data-test=\"username\"]",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "Password input",
+      "css": "[data-test=\"password\"]",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "LoginPage",
+      "element": "Login button",
+      "css": "[data-test=\"login-button\"]",
+      "preferred": "css",
+      "wait_condition": "clickable"
+    }
+  ],
+  "notes": "This test plan follows strict page object separation: one class per page (LoginPage, InventoryPage, CartPage, CheckoutInformationPage, CheckoutOverviewPage, CheckoutCompletePage, MenuPage). Fluent waits are used for inputs (visible), buttons (clickable), and wait_for_url() is applied after each navigation click. Only verified DOM locators provided for the Login page per the supplied scan. Before automation, perform a DOM scan on Inventory, Cart, Checkout (Step One & Two), Complete, and Menu to capture their actual data-test or id attributes (CSS preferred). Typical Saucedemo elements to confirm during scan include: add-to-cart for the backpack, shopping cart link, checkout, firstName, lastName, postalCode, continue, finish, burger menu button, logout link, and the completion header text. Use safe_type for all form inputs. No time.sleep; no hard waits. Each run must generate unique first/last name and postal code to avoid test data collisions."
+}

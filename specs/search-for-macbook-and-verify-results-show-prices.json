@@ -1,0 +1,58 @@
+{
+  "mode": "pytest",
+  "url": "https://demo.opencart.com",
+  "browser": "chrome",
+  "headless": false,
+  "test_scenarios": [
+    {
+      "id": "TC001",
+      "name": "Search for MacBook and verify results show prices",
+      "description": "This test verifies that searching for 'macbook' displays product prices on the results page.",
+      "steps": [
+        "open https://demo.opencart.com",
+        "type 'macbook' on SearchPage",
+        "click SearchButton on SearchPage",
+        "wait_for_url('search=macbook')",
+        "verify prices are visible on SearchResultsPage"
+      ],
+      "expected_result": "The search results display prices for the MacBook products.",
+      "test_data": {
+        "search_term": "macbook"
+      }
+    }
+  ],
+  "page_objects_needed": [
+    "SearchPage",
+    "SearchResultsPage"
+  ],
+  "locators": [
+    {
+      "page_object": "SearchPage",
+      "element": "Search input field",
+      "css": "input[name='search']",
+      "xpath": "//input[@name='search']",
+      "preferred": "css",
+      "wait_condition": "visible"
+    },
+    {
+      "page_object": "SearchPage",
+      "element": "Search button",
+      "css": "button[type='button'][class='btn btn-default btn-lg']",
+      "xpath": "//button[@type='button' and contains(@class, 'btn-default')]",
+      "preferred": "css",
+      "wait_condition": "clickable"
+    },
+    {
+      "page_object": "SearchResultsPage",
+      "element": "Product prices",
+      "css": ".price",
+      "xpath": "//div[contains(@class, 'price')]",
+      "preferred": "xpath",
+      "wait_condition": "visible"
+    }
+  ],
+  "pytest_markers": [
+    "smoke"
+  ],
+  "notes": ""
+}

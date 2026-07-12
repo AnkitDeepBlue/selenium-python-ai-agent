@@ -345,3 +345,16 @@ def test_infer_provider_from_model_name():
     assert infer_provider_for_model("claude-sonnet-5") == "anthropic"
     assert infer_provider_for_model("some-unknown-model") is None
     assert infer_provider_for_model(None) is None
+
+
+def test_config_persists_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from selenium_agent.utils import config_manager
+
+    monkeypatch.chdir(tmp_path)
+    config_manager.save({"project": "/path/to/my/framework"})
+    cfg = config_manager.load()
+    assert cfg["project"] == "/path/to/my/framework"
+
+    # Clearing: empty string is treated as unset by consumers
+    config_manager.save({"project": ""})
+    assert (config_manager.load()["project"] or None) is None
