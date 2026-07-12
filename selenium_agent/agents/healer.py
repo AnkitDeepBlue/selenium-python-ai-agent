@@ -483,7 +483,8 @@ class HealerAgent:
 
     # ── Main heal loop ─────────────────────────────────────────────────
 
-    def heal(self, saved_files: list[str], test_filter: str | None = None) -> dict:
+    def heal(self, saved_files: list[str], test_filter: str | None = None,
+             project_profile=None) -> dict:
         resolved = self._resolve_paths(saved_files)
 
         extra = self._auto_discover_related_files(resolved)
@@ -519,7 +520,8 @@ class HealerAgent:
 
             logger.warning(f"❌ Failed on attempt {attempt}")
             try:
-                applied = self._fix_once(resolved, output, test_filter, scan_cache)
+                applied = self._fix_once(resolved, output, test_filter, scan_cache,
+                                         project_profile=project_profile)
             except LLMJSONError as exc:
                 logger.error(f"💥 Healer LLM returned unusable JSON: {exc}")
                 applied = False
@@ -537,7 +539,8 @@ class HealerAgent:
         return {"status": "failed", "attempts": self.max_retries, "output": output}
 
     def _fix_once(self, resolved: dict[str, Path], output: str,
-                  test_filter: str | None, scan_cache: dict[str, str]) -> bool:
+                  test_filter: str | None, scan_cache: dict[str, str],
+                  project_profile=None) -> bool:
         """One LLM fix round. Returns True if at least one file was updated."""
         known_fix = SeleniumErrorMap.get_fix_summary(output)
 
@@ -582,6 +585,18 @@ class HealerAgent:
             system_prompt = HEALER_SYSTEM_PROMPT
             target_instruction = ""
 
+        project_instruction = ""
+        if project_profile is not None:
+            project_instruction = (
+                f"\n\n🏗️ EXISTING-PROJECT MODE — this codebase has its OWN "
+                f"architecture. The profile below OVERRIDES the default "
+                f"architecture/import rules above: mirror the project's "
+                f"patterns exactly, never convert files to the "
+                f"selenium_agent BasePage style, and tests use the fixture "
+                f"named '{project_profile.driver_fixture_name}'.\n\n"
+                f"{project_profile.to_llm_context()}\n"
+            )
+
         raw = self.client.generate_text(
             system_prompt=system_prompt,
             user_prompt=(
@@ -589,7 +604,8 @@ class HealerAgent:
                 f"SELENIUM ERROR ANALYSIS:\n{known_fix}\n\n"
                 f"{locator_context}\n"
                 f"PYTEST OUTPUT:\n{self._trim_output(output)}\n"
-                f"{target_instruction}\n"
+                f"{target_instruction}"
+                f"{project_instruction}\n"
                 f"CURRENT CODE:\n{files_text}"
             ),
             max_tokens=8000,
