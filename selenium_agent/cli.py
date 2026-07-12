@@ -201,7 +201,7 @@ Other examples:
     parser.add_argument("--test",          default=None, metavar="TEST_NAME",
                         help="Specific test function to run/heal. "
                              "e.g. --test test_login_locked_out_user")
-    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.2")
+    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.3")
 
     args = parser.parse_args()
 
