@@ -16,3 +16,4 @@ build/
 allure-results/
 allure-report/
 .selenium-agent.json
+specs/

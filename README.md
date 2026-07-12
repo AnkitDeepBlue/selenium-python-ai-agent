@@ -105,11 +105,17 @@ selenium-agent --heal-only generated_tests/tests/test_checkout.py
 Most teams don't start from scratch — they already have a Selenium project. Point the agent at it with `--project` and it **adapts to your structure instead of imposing its own**:
 
 ```bash
-# First, see what the scanner detects about your project (read-only)
+# First, see what the scanner detects about your project (read-only).
+# The path is SAVED to config — you never need to repeat it.
 selenium-agent --scan /path/to/your/project
 
-# Then generate tests that FIT INTO it
-selenium-agent "test the invoice creation flow" --project /path/to/your/project
+# From now on every run fits into it automatically:
+selenium-agent "test the invoice creation flow"
+selenium-agent "test the user permissions page"
+
+# Manage the saved project:
+selenium-agent config --project /other/project   # switch
+selenium-agent config --project none             # clear
 ```
 
 The built-in **ProjectScanner** detects and follows:
@@ -329,7 +335,7 @@ generated_tests/
 | `--headless` | Headless browser | from config (`false`) |
 | `--explore N` | Explore up to N extra same-origin pages while planning (relevance-ranked, multi-hop) | `0` |
 | `--output-dir` | Where to save generated files | `generated_tests` |
-| `--project` | Fit into existing project path | — |
+| `--project` | Existing project path (saved to config — set once) | from config |
 | `--max-retries` | Healer fix attempts | `5` |
 | `--no-heal` | Skip healing after codegen | `false` |
 | `--plan-only` | Save + show plan, no code | `false` |
