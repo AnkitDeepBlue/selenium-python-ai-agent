@@ -358,3 +358,65 @@ def test_config_persists_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     # Clearing: empty string is treated as unset by consumers
     config_manager.save({"project": ""})
     assert (config_manager.load()["project"] or None) is None
+
+
+# ── project-native mode ────────────────────────────────────────────────
+
+
+def _make_fake_project(tmp_path: Path):
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "generated_tests" / "pages").mkdir(parents=True)
+    (tmp_path / "pages" / "home_page.py").write_text(
+        "from utils.helpers import HelperBot\n\nclass HomePage:\n    def __init__(self, driver):\n        self.bot = HelperBot(driver)\n"
+    )
+    (tmp_path / "generated_tests" / "pages" / "old_page.py").write_text(
+        "from selenium_agent.selenium.base_page import BasePage\nclass OldPage(BasePage):\n    pass\n"
+    )
+    (tmp_path / "tests" / "conftest.py").write_text(
+        "import pytest\nfrom selenium import webdriver\n\n"
+        "@pytest.fixture(scope=\"session\")\ndef browser():\n"
+        "    d = webdriver.Chrome()\n    yield d\n    d.quit()\n"
+    )
+    (tmp_path / "tests" / "test_home.py").write_text(
+        "def test_home(browser):\n    assert browser\n"
+    )
+
+
+def test_scanner_ignores_own_output_and_prefers_shallow_dirs(tmp_path: Path):
+    from selenium_agent.scanner.project_scanner import ProjectScanner
+
+    _make_fake_project(tmp_path)
+    profile = ProjectScanner(str(tmp_path)).scan()
+
+    assert profile.pages_dir == "pages"                # not generated_tests/pages
+    assert "selenium_agent" not in profile.sample_page_code  # own output excluded
+    assert "HelperBot" in profile.sample_page_code     # the REAL project style
+
+
+def test_scanner_detects_fixture_name(tmp_path: Path):
+    from selenium_agent.scanner.project_scanner import ProjectScanner
+
+    _make_fake_project(tmp_path)
+    profile = ProjectScanner(str(tmp_path)).scan()
+
+    assert profile.driver_fixture_name == "browser"
+    assert "fixture name='browser'" in profile.to_llm_context()
+
+
+def test_project_native_prompt_replaces_default_architecture(tmp_path: Path):
+    from selenium_agent.agents.coder import CoderAgent
+    from selenium_agent.scanner.project_scanner import ProjectScanner
+
+    _make_fake_project(tmp_path)
+    profile = ProjectScanner(str(tmp_path)).scan()
+    prompt = CoderAgent._system_prompt_for("pytest", profile)
+
+    assert "def test_something(browser):" in prompt
+    assert "generated_tests/" in prompt          # named as FORBIDDEN
+    assert "HelperBot" in prompt                 # project's sample code included
+    assert "selenium_agent.selenium.base_page" not in prompt  # our BasePage gone
+
+    # Standalone mode is unchanged
+    standalone = CoderAgent._system_prompt_for("pytest", None)
+    assert "selenium_agent.selenium.base_page" in standalone

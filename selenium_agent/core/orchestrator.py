@@ -148,7 +148,8 @@ class Orchestrator:
         return self.coder.code(plan, project_profile=self.project_profile)
 
     def heal_only(self, file_paths: list, test_filter: str | None = None) -> dict:
-        return self.healer.heal(file_paths, test_filter=test_filter)
+        return self.healer.heal(file_paths, test_filter=test_filter,
+                                project_profile=self.project_profile)
 
     def scan_only(self, project_root: str) -> str:
         from selenium_agent.scanner.project_scanner import ProjectScanner
@@ -183,7 +184,8 @@ class Orchestrator:
         heal_result = None
         if self.auto_heal:
             logger.info("\n🩺 STEP 3: HEALER")
-            heal_result = self.healer.heal(saved_files)
+            heal_result = self.healer.heal(saved_files,
+                                           project_profile=self.project_profile)
         else:
             logger.info("\n⏭️  Auto-heal skipped")
         return saved_files, heal_result

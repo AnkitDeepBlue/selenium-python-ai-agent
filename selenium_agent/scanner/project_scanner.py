@@ -54,6 +54,7 @@ class ProjectProfile:
     # Driver setup
     driver_setup: str = "fixture"               # fixture | setUp | class-level
     driver_scope: str = "function"              # function | class | module
+    driver_fixture_name: str = "driver"         # actual fixture name (e.g. 'browser')
     browser: str = "chrome"
     headless: bool = False
 
@@ -91,7 +92,8 @@ class ProjectProfile:
             f"BDD detected      : {self.has_bdd}",
             f"Base Page class   : {self.base_page_class}",
             f"Base Page import  : {self.base_page_import or 'not detected'}",
-            f"Driver setup      : {self.driver_setup} (scope={self.driver_scope})",
+            f"Driver setup      : {self.driver_setup} (scope={self.driver_scope}, "
+            f"fixture name='{self.driver_fixture_name}')",
             f"Browser           : {self.browser} (headless={self.headless})",
             f"Test file pattern : {self.test_file_prefix}<name>.py",
             f"Page file pattern : <name>{self.page_file_suffix}.py",
@@ -169,12 +171,18 @@ class ProjectScanner:
     # ── Detection methods ─────────────────────────────────────────────
 
     def _detect_folders(self):
-        """Find pages, tests, features, steps directories."""
-        all_dirs = [
-            d for d in self.root.rglob("*")
-            if d.is_dir() and not self._is_ignored(d)
-        ]
-        dir_names = {d.name.lower(): d for d in all_dirs}
+        """Find pages, tests, features, steps directories.
+
+        Shallowest directory wins: a project's real `pages/` at the root
+        must beat any deeper `something/pages/` twin."""
+        all_dirs = sorted(
+            (d for d in self.root.rglob("*")
+             if d.is_dir() and not self._is_ignored(d)),
+            key=lambda d: len(d.parts),
+        )
+        dir_names: dict = {}
+        for d in all_dirs:
+            dir_names.setdefault(d.name.lower(), d)
 
         for name in self.PAGES_DIRS:
             if name in dir_names:
@@ -301,11 +309,19 @@ class ProjectScanner:
                 continue
 
             # Fixture pattern
-            if "@pytest.fixture" in content and "driver" in content:
+            if "@pytest.fixture" in content and "driver" in content.lower():
                 self.profile.driver_setup = "fixture"
                 scope_match = re.search(r'@pytest\.fixture\s*\(\s*scope=["\'](\w+)["\']', content)
                 if scope_match:
                     self.profile.driver_scope = scope_match.group(1)
+                # The fixture NAME matters — generated tests must request the
+                # project's actual fixture ('browser', 'web_driver', ...),
+                # not assume it is called 'driver'.
+                name_match = re.search(
+                    r"@pytest\.fixture(?:\([^)]*\))?\s*\ndef\s+(\w+)\s*\(", content
+                )
+                if name_match and f.name == "conftest.py":
+                    self.profile.driver_fixture_name = name_match.group(1)
 
             # unittest setUp pattern
             elif "def setUp(self)" in content:
@@ -445,8 +461,14 @@ class ProjectScanner:
                 continue
 
     def _is_ignored(self, path: Path) -> bool:
-        """Skip venv, cache, git, node_modules etc."""
+        """Skip venv, cache, git, node_modules etc.
+
+        Also skips the agent's OWN output folders (generated_tests/, specs/):
+        scanning them would make the profile describe the agent's previous
+        output instead of the user's real framework — circular pollution.
+        """
         ignored = {".venv", "venv", "__pycache__", ".git", ".idea",
                    "node_modules", ".pytest_cache", "dist", "build",
-                   ".eggs", "*.egg-info", ".tox", ".mypy_cache"}
+                   ".eggs", "*.egg-info", ".tox", ".mypy_cache",
+                   "generated_tests", "specs"}
         return any(part in ignored for part in path.parts)

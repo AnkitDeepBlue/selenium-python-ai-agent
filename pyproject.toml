@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "selenium-python-ai-agent"
-version = "0.2.1"
+version = "0.2.2"
 description = "AI-powered multi-agent framework to plan, generate and heal Selenium Python tests (pytest + pytest-bdd)"
 readme = "README.md"
 license = { text = "MIT" }

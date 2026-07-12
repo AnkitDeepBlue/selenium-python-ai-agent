@@ -245,6 +245,51 @@ Output valid JSON only, no markdown:
 ]}}
 """
 
+PROJECT_NATIVE_SYSTEM_PROMPT = """
+You are an expert Selenium Python engineer extending an EXISTING test
+framework. The project profile below — especially its sample code — is the
+ONLY architecture reference. You are a guest in this codebase: mirror its
+patterns exactly, never import your own.
+
+{project_context}
+
+══ HARD RULES ══
+
+1. FILE LOCATIONS — write ONLY into the project's own folders:
+     page objects → {pages_dir}/
+     test files   → {tests_dir}/
+   FORBIDDEN: creating new top-level folders (generated_tests/, output/, ...).
+
+2. ARCHITECTURE — copy the sample page object's style exactly: same base
+   class (or none), same helper/service/logger imports, same constructor
+   signature, same method style. Do NOT import selenium_agent modules
+   unless the samples themselves do.
+
+3. DRIVER — the project's conftest.py already provides the fixture named
+   '{fixture_name}'. Test functions accept it as a parameter:
+       def test_something({fixture_name}):
+   NEVER define fixtures, NEVER create drivers, NEVER assume the fixture
+   is called 'driver' if the project calls it something else.
+
+4. IMPORTS — follow the project's import style shown in the samples
+   (e.g. 'from pages.login_page import LoginPage').
+
+══ QUALITY RULES (always apply) ══
+  - Use ONLY locators from the plan / DOM scan — never invent
+  - Unique runtime test data for entity-creating flows:
+      import uuid; unique = uuid.uuid4().hex[:8]
+      email = "qa." + unique + "@example.com"; password = "Xk9#" + unique + "!Qz"
+  - Fill EVERY form field the scan shows, not just the ones named
+  - Assert POST-action outcomes (what changes/appears), never pre-action text
+  - No time.sleep(), no pytest.skip() placeholders, no TODO steps
+
+Output valid JSON only, no markdown:
+{{"files": [
+  {{"filename": "{pages_dir}/<name>_page.py", "content": "..."}},
+  {{"filename": "{tests_dir}/test_<name>.py",  "content": "..."}}
+]}}
+"""
+
 REPAIR_PROMPT = """
 The code you generated has validation errors. Fix them and return the
 COMPLETE corrected set of files in the same JSON format.
@@ -270,7 +315,7 @@ class CoderAgent:
         mode = plan.get("mode", "pytest")
         logger.info(f"💻 Generating [{mode.upper()}] code (headless={plan.get('headless', False)})...")
 
-        system_prompt = CODER_SYSTEM_PROMPT_BDD if mode == "bdd" else CODER_SYSTEM_PROMPT_PYTEST
+        system_prompt = self._system_prompt_for(mode, project_profile)
         user_prompt = self._build_user_prompt(plan, project_profile, mode)
         max_tokens = self._token_budget(plan)
 
@@ -374,6 +419,24 @@ class CoderAgent:
         return sorted(markers)
 
     # ── Prompt building ────────────────────────────────────────────────
+
+    @staticmethod
+    def _system_prompt_for(mode: str, project_profile=None) -> str:
+        """
+        Standalone mode teaches the framework's own BasePage architecture.
+        Project mode REPLACES that entirely: the user's existing framework
+        (its samples, folders, fixture name) is the only reference —
+        supplementing a strong default architecture with a small 'fit in'
+        note demonstrably loses to the baked-in style.
+        """
+        if project_profile is not None and mode != "bdd":
+            return PROJECT_NATIVE_SYSTEM_PROMPT.format(
+                project_context=project_profile.to_llm_context(),
+                pages_dir=project_profile.pages_dir.rstrip("/"),
+                tests_dir=project_profile.tests_dir.rstrip("/"),
+                fixture_name=project_profile.driver_fixture_name,
+            )
+        return CODER_SYSTEM_PROMPT_BDD if mode == "bdd" else CODER_SYSTEM_PROMPT_PYTEST
 
     def _build_user_prompt(self, plan: dict, project_profile, mode: str) -> str:
         project_context = ""

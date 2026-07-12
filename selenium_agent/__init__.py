@@ -15,6 +15,6 @@ Usage (CLI):
 
 from selenium_agent.core.orchestrator import Orchestrator as SeleniumAgent
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__ = "Ankit Tripathi"
 __all__ = ["SeleniumAgent"]
