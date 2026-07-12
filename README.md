@@ -5,7 +5,7 @@
 
 [![PyPI version](https://badge.fury.io/py/selenium-python-ai-agent.svg)](https://pypi.org/project/selenium-python-ai-agent/)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/AnkitDeepBlue/selenium-python-ai-agent/blob/main/LICENSE)
 
 ---
 
@@ -375,7 +375,7 @@ Subcommands: `selenium-agent config …`, `selenium-agent init-agents …`, `sel
 
 ## 🤝 Contributing
 
-PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
+PRs welcome! See [CONTRIBUTING.md](https://github.com/AnkitDeepBlue/selenium-python-ai-agent/blob/main/CONTRIBUTING.md)
 
 ---
 
