@@ -1,11 +1,24 @@
 # Selenium Python AI Agent 🤖
 
-> AI-powered multi-agent framework that **plans**, **generates**, and **heals** Selenium Python tests automatically — working the way **Playwright's test agents** do, but for Selenium.
+> AI-powered multi-agent framework that **plans**, **generates**, and **heals** Selenium Python tests automatically — working the way **Microsoft Playwright's test agents** do, but for **Selenium Python**. **Standalone and CI-ready — no AI IDE session required. Your tests, your code, your repo.**
 > Supports **Anthropic Claude** and **OpenAI ChatGPT** as LLM backends.
 
 [![PyPI version](https://badge.fury.io/py/selenium-python-ai-agent.svg)](https://pypi.org/project/selenium-python-ai-agent/)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/AnkitDeepBlue/selenium-python-ai-agent/blob/main/LICENSE)
+
+---
+
+## ✨ Key Capabilities
+
+- 🧠 **Self-driving pipeline** — built-in Planner → Generator → Healer; runs from any terminal or CI with exit codes
+- 📦 **You own the output** — AI writes the code once; real Page Object Model files live in your repo and run with plain `pytest` — no AI dependency, no per-run API cost
+- 🏗️ **Fresh or existing projects** — start from scratch, or point it at your current framework and it generates in *its* style: your folders, your base classes, your fixtures
+- 🩺 **Verified healing** — run → live DOM re-scan → fix → re-run; a fix only counts when tests actually pass
+- 📋 **Reviewable plans** — `specs/*.md` artifacts you can read, edit, and regenerate from
+- 🤝 **CLI + agent workflows** — full CLI plus Claude Code integration (`selenium-agent init-agents`)
+- ✅ **Minutes to first green suite** — `pip install`, one plain-English sentence, and you have a running, passing E2E suite
+- 💯 **Enterprise-grade projects or a quick client POC** — engineered for long-term test suites, fast enough to demo today
 
 ---
 
