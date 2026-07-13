@@ -25,7 +25,7 @@ def make_healer(output_dir: Path) -> HealerAgent:
 
 
 def test_package_import_exposes_public_api():
-    assert selenium_agent.__version__ == "0.2.4"
+    assert selenium_agent.__version__ == "0.2.5"
     assert selenium_agent.SeleniumAgent.__name__ == "Orchestrator"
 
 
