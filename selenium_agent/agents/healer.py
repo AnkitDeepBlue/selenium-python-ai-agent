@@ -483,9 +483,45 @@ class HealerAgent:
 
     # ── Main heal loop ─────────────────────────────────────────────────
 
+    def _steps_for_feature(self, feature: Path) -> list[Path]:
+        """
+        Map a .feature file to the step-definition test file(s) that run it.
+        A .feature is data, not runnable — when a user passes one to
+        --heal-only, the intent is obviously "heal the tests behind it".
+        """
+        project_root = feature.parent.parent
+        candidates: list[Path] = []
+        for steps_dir in (project_root / "step_definitions", project_root / "steps",
+                          feature.parent):
+            if not steps_dir.is_dir():
+                continue
+            exact = steps_dir / f"test_{feature.stem}_steps.py"
+            if exact.exists():
+                return [exact]
+            for f in steps_dir.glob("test_*.py"):
+                try:
+                    if feature.name in f.read_text(encoding="utf-8"):
+                        candidates.append(f)
+                except Exception:
+                    continue
+        return candidates
+
     def heal(self, saved_files: list[str], test_filter: str | None = None,
              project_profile=None) -> dict:
         resolved = self._resolve_paths(saved_files)
+
+        # BDD convenience: .feature inputs resolve to their step-definition tests
+        output_root = Path(self.output_dir)
+        for label, path in list(resolved.items()):
+            if path.suffix == ".feature" and path.exists():
+                for steps in self._steps_for_feature(path):
+                    if all(str(steps) != str(v) for v in resolved.values()):
+                        try:
+                            lbl = str(steps.relative_to(output_root))
+                        except ValueError:
+                            lbl = steps.name
+                        resolved[lbl] = steps
+                        logger.info(f"🔗 {path.name} → step definitions: {steps.name}")
 
         extra = self._auto_discover_related_files(resolved)
         if extra:
@@ -498,7 +534,13 @@ class HealerAgent:
         ]
 
         if not test_absolutes:
-            logger.warning("⚠️  No test files found to run")
+            logger.warning(
+                "⚠️  No runnable test files (test_*.py) among the given paths.\n"
+                "   Pass the pytest test file — e.g. tests/test_login.py, or for "
+                "BDD the step_definitions/test_<name>_steps.py file.\n"
+                "   Page objects and .feature files are healed alongside their "
+                "tests automatically."
+            )
             return {"status": "no_tests", "attempts": 0, "output": ""}
 
         if test_filter:
