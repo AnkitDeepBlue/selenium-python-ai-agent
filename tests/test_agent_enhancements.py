@@ -420,3 +420,32 @@ def test_project_native_prompt_replaces_default_architecture(tmp_path: Path):
     # Standalone mode is unchanged
     standalone = CoderAgent._system_prompt_for("pytest", None)
     assert "selenium_agent.selenium.base_page" in standalone
+
+
+# ── heal-only: .feature inputs map to step definitions ─────────────────
+
+
+def test_feature_file_maps_to_step_definitions(tmp_path: Path):
+    root = tmp_path / "generated_tests"
+    (root / "features").mkdir(parents=True)
+    (root / "step_definitions").mkdir()
+    feature = root / "features" / "login_and_logout.feature"
+    feature.write_text("Feature: Login\n")
+    steps = root / "step_definitions" / "test_login_and_logout_steps.py"
+    steps.write_text("from pytest_bdd import scenarios\nscenarios('../features/login_and_logout.feature')\n")
+
+    healer = make_healer(root)
+    assert healer._steps_for_feature(feature) == [steps]
+
+
+def test_feature_maps_by_content_when_name_differs(tmp_path: Path):
+    root = tmp_path / "generated_tests"
+    (root / "features").mkdir(parents=True)
+    (root / "step_definitions").mkdir()
+    feature = root / "features" / "checkout.feature"
+    feature.write_text("Feature: Checkout\n")
+    steps = root / "step_definitions" / "test_purchase_steps.py"  # different name
+    steps.write_text("scenarios('../features/checkout.feature')\n")
+
+    healer = make_healer(root)
+    assert healer._steps_for_feature(feature) == [steps]
