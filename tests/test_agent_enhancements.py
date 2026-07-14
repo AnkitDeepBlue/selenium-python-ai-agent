@@ -449,3 +449,54 @@ def test_feature_maps_by_content_when_name_differs(tmp_path: Path):
 
     healer = make_healer(root)
     assert healer._steps_for_feature(feature) == [steps]
+
+
+# ── stakeholder summary + strategy in plan markdown ────────────────────
+
+
+def test_render_markdown_includes_summary_and_strategy():
+    plan = dict(SAMPLE_PLAN)
+    plan["summary"] = "A customer signs in and completes a purchase; we verify the confirmation."
+    plan["test_strategy"] = {
+        "scope": "End-to-end purchase journey",
+        "out_of_scope": "Payment gateway internals",
+        "approach": "UI E2E with page objects",
+        "environment": "Chrome, https://www.saucedemo.com",
+        "risks": ["Demo site data resets periodically"],
+    }
+    md = render_markdown(plan, "checkout flow")
+    assert "## Summary (for stakeholders)" in md
+    assert "A customer signs in" in md
+    assert "## Test Strategy" in md
+    assert "**Scope:** End-to-end purchase journey" in md
+    assert "Demo site data resets periodically" in md
+    # Plans without these fields still render fine
+    assert "## Summary" not in render_markdown(SAMPLE_PLAN, "x")
+
+
+# ── healing report (display-only) ──────────────────────────────────────
+
+
+def test_heal_report_formatting():
+    report = [
+        {"attempt": 1, "problem": "TimeoutException: wait_for_url('/dash') timed out",
+         "fix": "Replaced URL wait with in-page status assertion",
+         "files": ["pages/login_page.py"], "applied": True},
+        {"attempt": 2, "problem": "AssertionError: expected 'AUTHENTICATED'",
+         "fix": "Corrected status locator", "files": ["pages/login_page.py"],
+         "applied": True},
+    ]
+    text = HealerAgent._format_heal_report(report, "passed", 3)
+    assert "HEALING REPORT" in text
+    assert "Attempt 1:" in text and "Attempt 2:" in text
+    assert "Replaced URL wait" in text
+    assert "pages/login_page.py" in text
+    assert "Result: PASSED after 3 attempt(s)" in text
+
+
+def test_problem_summary_prefers_on_page_errors():
+    out_with_failure_errors = "blah\nFAILURE_ERRORS: ['Email already taken']\nE  AssertionError: x"
+    assert "Email already taken" in HealerAgent._problem_summary(out_with_failure_errors)
+
+    out_plain = "tests/test_x.py:9: in test\nE   selenium.common.exceptions.TimeoutException: Message:"
+    assert "TimeoutException" in HealerAgent._problem_summary(out_plain)
