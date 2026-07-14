@@ -547,6 +547,7 @@ class HealerAgent:
             logger.info(f"🎯 Heal scope: '{test_filter}' only — other tests preserved")
 
         scan_cache: dict[str, str] = {}
+        report: list[dict] = []
         output = ""
         attempt = 0
 
@@ -558,32 +559,81 @@ class HealerAgent:
 
             if passed:
                 logger.info("✅ All tests passing!")
-                return {"status": "passed", "attempts": attempt, "output": output}
+                self._emit_report(report, "passed", attempt)
+                return {"status": "passed", "attempts": attempt,
+                        "output": output, "report": report}
 
             logger.warning(f"❌ Failed on attempt {attempt}")
+            problem = self._problem_summary(output)
             try:
-                applied = self._fix_once(resolved, output, test_filter, scan_cache,
-                                         project_profile=project_profile)
+                fix = self._fix_once(resolved, output, test_filter, scan_cache,
+                                     project_profile=project_profile)
             except LLMJSONError as exc:
                 logger.error(f"💥 Healer LLM returned unusable JSON: {exc}")
-                applied = False
-            if not applied:
+                fix = {"applied": False, "fix_summary": "LLM returned unusable JSON",
+                       "files": []}
+            report.append({"attempt": attempt, "problem": problem,
+                           "fix": fix["fix_summary"], "files": fix["files"],
+                           "applied": fix["applied"]})
+            if not fix["applied"]:
                 logger.warning("⚠️  No usable fix produced this round")
 
         # ── Final verification: the last fix must prove itself ──
         logger.info("🔁 Final verification run")
         passed, output = self._run_tests(test_absolutes, test_filter=test_filter)
+        status = "passed" if passed else "failed"
         if passed:
             logger.info("✅ All tests passing after final fix!")
-            return {"status": "passed", "attempts": self.max_retries, "output": output}
+        else:
+            logger.error(f"💀 Could not fix after {self.max_retries} attempts")
+        self._emit_report(report, status, self.max_retries)
+        return {"status": status, "attempts": self.max_retries,
+                "output": output, "report": report}
 
-        logger.error(f"💀 Could not fix after {self.max_retries} attempts")
-        return {"status": "failed", "attempts": self.max_retries, "output": output}
+    # ── Healing report (displayed, never saved) ───────────────────────
+
+    @staticmethod
+    def _problem_summary(output: str) -> str:
+        """One-line diagnosis of what actually failed, best evidence first."""
+        m = re.search(r"FAILURE_ERRORS: (\[.*?\])", output)
+        if m:
+            return f"On-page errors: {m.group(1)[:140]}"
+        for line in output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("E ") or stripped.startswith("E\t"):
+                return stripped[1:].strip()[:160]
+        m = re.search(r"FAILED [^\s]+ - (.+)", output)
+        if m:
+            return m.group(1).strip()[:160]
+        if "ERROR" in output:
+            return "collection/import error (see pytest output)"
+        return "see pytest output"
+
+    @staticmethod
+    def _format_heal_report(report: list[dict], status: str, attempts: int) -> str:
+        lines = ["", "🩺 HEALING REPORT " + "─" * 42]
+        for entry in report:
+            lines.append(f"Attempt {entry['attempt']}:")
+            lines.append(f"  Problem : {entry['problem']}")
+            lines.append(f"  Fix     : {entry['fix']}")
+            files = ", ".join(entry["files"]) if entry["files"] else "—"
+            lines.append(f"  Files   : {files}")
+        lines.append(f"Result: {status.upper()} after {attempts} attempt(s)")
+        lines.append("─" * 60)
+        return "\n".join(lines)
+
+    def _emit_report(self, report: list[dict], status: str, attempts: int) -> None:
+        """Display the healing report — never persisted to disk."""
+        if report:
+            logger.info(self._format_heal_report(report, status, attempts))
 
     def _fix_once(self, resolved: dict[str, Path], output: str,
                   test_filter: str | None, scan_cache: dict[str, str],
-                  project_profile=None) -> bool:
-        """One LLM fix round. Returns True if at least one file was updated."""
+                  project_profile=None) -> dict:
+        """One LLM fix round.
+
+        Returns {"applied": bool, "fix_summary": str, "files": [labels]} —
+        the raw material of the healing report."""
         known_fix = SeleniumErrorMap.get_fix_summary(output)
 
         # ── DOM re-scan of every URL the tests touch (live ground truth) ──
@@ -655,9 +705,11 @@ class HealerAgent:
         )
 
         result = extract_json_object(raw)
-        logger.info(f"🔧 Fix: {result.get('fix_summary', 'No summary')}")
+        fix_summary = result.get("fix_summary", "No summary")
+        logger.info(f"🔧 Fix: {fix_summary}")
 
         wrote_any = False
+        written_files: list[str] = []
         for file_info in result.get("fixed_files", []):
             filename = file_info.get("filename", "")
             fixed_content = file_info.get("content", "")
@@ -692,5 +744,7 @@ class HealerAgent:
             written = self._write_fixed_file(filename, fixed_content, resolved)
             logger.info(f"📝 Updated: {written}")
             wrote_any = True
+            written_files.append(filename)
 
-        return wrote_any
+        return {"applied": wrote_any, "fix_summary": fix_summary,
+                "files": written_files}

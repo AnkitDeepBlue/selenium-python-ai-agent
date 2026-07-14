@@ -40,6 +40,26 @@ def render_markdown(plan: dict, instruction: str = "") -> str:
         f"- **Target URL**: {url or 'n/a'}",
         f"- **Browser**: {plan.get('browser', 'chrome')} (headless={plan.get('headless', False)})",
         "",
+    ]
+
+    # Non-technical narrative — shareable with stakeholders as-is
+    if plan.get("summary"):
+        lines += ["## Summary (for stakeholders)", "", str(plan["summary"]), ""]
+
+    strategy = plan.get("test_strategy") or {}
+    if strategy:
+        lines += ["## Test Strategy", ""]
+        for key, label in (("scope", "Scope"), ("out_of_scope", "Out of scope"),
+                           ("approach", "Approach"), ("environment", "Environment")):
+            if strategy.get(key):
+                lines.append(f"- **{label}:** {strategy[key]}")
+        risks = strategy.get("risks") or []
+        if risks:
+            lines.append("- **Risks & assumptions:**")
+            lines += [f"  - {r}" for r in risks]
+        lines.append("")
+
+    lines += [
         "## Page Objects",
         "",
     ]

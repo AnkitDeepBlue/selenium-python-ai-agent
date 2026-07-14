@@ -67,6 +67,16 @@ For flows that span multiple pages (login → inventory → cart → checkout �
   For React/SPA forms always use safe_type() — not type():
   safe_type(page, page.FIRST_NAME_INPUT, "John")
 
+══ SUMMARY & STRATEGY (for the QA lead / stakeholders) ══
+  - "summary": a short user-story narrative a NON-TECHNICAL stakeholder can
+    read — what the user does and what we verify. No selectors, no code
+    words, no tool names. Example tone: "A customer signs in, adds the
+    backpack to their cart, completes checkout with their details, and sees
+    the order confirmation. We verify each step succeeds and the customer
+    can sign out afterwards."
+  - "test_strategy": concise scope / out-of-scope / approach / environment /
+    risks — professional test-plan language, one line each.
+
 ══ SCENARIO QUALITY (enterprise test design) ══
   - Cover the happy path FIRST, then negative/edge cases relevant to the instruction
   - Every scenario independent — no shared state between scenarios
@@ -92,6 +102,14 @@ _PYTEST_SCHEMA = """
 {
   "mode": "pytest",
   "url": "<EXACT URL from instruction>",
+  "summary": "<3-5 sentence PLAIN-ENGLISH story of what a user does and what is verified — written for NON-TECHNICAL stakeholders: no selectors, no code terms, no tool names>",
+  "test_strategy": {
+    "scope": "<what this plan covers>",
+    "out_of_scope": "<what it deliberately does not cover>",
+    "approach": "<how it is tested: end-to-end UI flow, page objects, data strategy>",
+    "environment": "<browser + target URL/environment>",
+    "risks": ["<risk or assumption>", "<...>"]
+  },
   "browser": "chrome",
   "headless": false,
   "test_scenarios": [
@@ -130,6 +148,14 @@ _BDD_SCHEMA = """
 {
   "mode": "bdd",
   "url": "<EXACT URL from instruction>",
+  "summary": "<3-5 sentence PLAIN-ENGLISH story of what a user does and what is verified — written for NON-TECHNICAL stakeholders: no selectors, no code terms, no tool names>",
+  "test_strategy": {
+    "scope": "<what this plan covers>",
+    "out_of_scope": "<what it deliberately does not cover>",
+    "approach": "<how it is tested: end-to-end UI flow, page objects, data strategy>",
+    "environment": "<browser + target URL/environment>",
+    "risks": ["<risk or assumption>", "<...>"]
+  },
   "feature_name": "<feature name>",
   "feature_title": "<Feature Title>",
   "role": "<user role>",
