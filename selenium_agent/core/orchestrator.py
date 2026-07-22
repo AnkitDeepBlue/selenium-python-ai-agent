@@ -35,6 +35,7 @@ class Orchestrator:
         project_root: str | None = None,
         headless: bool = False,
         explore_pages: int = 0,
+        save_report: bool = False,
     ):
         self.provider = normalize_provider(provider)
         self.model    = model or get_default_model(self.provider)
@@ -58,7 +59,8 @@ class Orchestrator:
                                   provider=self.provider, model=self.model)
         self.healer  = HealerAgent(api_key=self.api_key, output_dir=self.output_dir,
                                    max_retries=max_heal_retries,
-                                   provider=self.provider, model=self.model)
+                                   provider=self.provider, model=self.model,
+                                   save_report=save_report)
 
     def _scan_project(self, project_root: str):
         from selenium_agent.scanner.project_scanner import ProjectScanner
