@@ -500,3 +500,60 @@ def test_problem_summary_prefers_on_page_errors():
 
     out_plain = "tests/test_x.py:9: in test\nE   selenium.common.exceptions.TimeoutException: Message:"
     assert "TimeoutException" in HealerAgent._problem_summary(out_plain)
+
+
+# ── healing report HTML export (--save-report) ─────────────────────────
+
+
+SAMPLE_REPORT = [
+    {"attempt": 1, "problem": "TimeoutException: element #login not found",
+     "fix": "Updated LOGIN_BUTTON locator from live DOM scan",
+     "files": ["pages/login_page.py"], "applied": True},
+]
+
+
+def test_render_report_html_contains_details():
+    html = HealerAgent._render_report_html(SAMPLE_REPORT, "passed", 2)
+    assert "<!DOCTYPE html>" in html
+    assert "Healing Report" in html
+    assert "PASSED after 2 attempt(s)" in html
+    assert "TimeoutException: element #login not found" in html
+    assert "Updated LOGIN_BUTTON locator" in html
+    assert "pages/login_page.py" in html
+    assert "fix applied" in html
+
+
+def test_render_report_html_escapes_markup():
+    report = [{"attempt": 1, "problem": "<script>alert(1)</script>",
+               "fix": "x", "files": [], "applied": False}]
+    html = HealerAgent._render_report_html(report, "failed", 1)
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "no usable fix" in html
+
+
+def test_render_report_html_clean_pass_message():
+    html = HealerAgent._render_report_html([], "passed", 1)
+    assert "No fixes were needed" in html
+
+
+def test_emit_report_is_display_only_by_default(tmp_path: Path):
+    healer = make_healer(tmp_path / "generated_tests")
+    assert healer._emit_report(SAMPLE_REPORT, "passed", 1) is None
+    assert not (tmp_path / "generated_tests" / "heal_reports").exists()
+
+
+def test_emit_report_saves_html_when_enabled(tmp_path: Path):
+    healer = make_healer(tmp_path / "generated_tests")
+    healer.save_report = True
+
+    saved = healer._emit_report(SAMPLE_REPORT, "failed", 3)
+
+    assert saved is not None
+    path = Path(saved)
+    assert path.exists()
+    assert path.parent.name == "heal_reports"
+    assert path.suffix == ".html"
+    content = path.read_text(encoding="utf-8")
+    assert "FAILED after 3 attempt(s)" in content
+    assert "Updated LOGIN_BUTTON locator" in content

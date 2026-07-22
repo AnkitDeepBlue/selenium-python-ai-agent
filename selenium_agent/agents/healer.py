@@ -17,9 +17,11 @@ Guarantees:
 - With --test, all other test functions are preserved verbatim.
 """
 
+import html as html_lib
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from selenium_agent.utils.logger import setup_logger
@@ -226,11 +228,12 @@ Respond with valid JSON only:
 class HealerAgent:
     def __init__(self, api_key: str, output_dir: str = "generated_tests",
                  max_retries: int = 5, provider: str = DEFAULT_PROVIDER,
-                 model: str | None = None):
+                 model: str | None = None, save_report: bool = False):
         resolved_model = model or get_default_model(provider)
         self.client = create_llm_client(provider=provider, api_key=api_key, model=resolved_model)
         self.output_dir = str(Path(output_dir).resolve())
         self.max_retries = max_retries
+        self.save_report = save_report
 
     # ── Path handling ──────────────────────────────────────────────────
 
@@ -559,9 +562,10 @@ class HealerAgent:
 
             if passed:
                 logger.info("✅ All tests passing!")
-                self._emit_report(report, "passed", attempt)
+                report_file = self._emit_report(report, "passed", attempt)
                 return {"status": "passed", "attempts": attempt,
-                        "output": output, "report": report}
+                        "output": output, "report": report,
+                        "report_file": report_file}
 
             logger.warning(f"❌ Failed on attempt {attempt}")
             problem = self._problem_summary(output)
@@ -586,11 +590,12 @@ class HealerAgent:
             logger.info("✅ All tests passing after final fix!")
         else:
             logger.error(f"💀 Could not fix after {self.max_retries} attempts")
-        self._emit_report(report, status, self.max_retries)
+        report_file = self._emit_report(report, status, self.max_retries)
         return {"status": status, "attempts": self.max_retries,
-                "output": output, "report": report}
+                "output": output, "report": report,
+                "report_file": report_file}
 
-    # ── Healing report (displayed, never saved) ───────────────────────
+    # ── Healing report (displayed; saved to HTML only with --save-report) ──
 
     @staticmethod
     def _problem_summary(output: str) -> str:
@@ -622,10 +627,108 @@ class HealerAgent:
         lines.append("─" * 60)
         return "\n".join(lines)
 
-    def _emit_report(self, report: list[dict], status: str, attempts: int) -> None:
-        """Display the healing report — never persisted to disk."""
+    def _emit_report(self, report: list[dict], status: str, attempts: int) -> str | None:
+        """Display the healing report. Persisted to an HTML file only when
+        save_report is enabled (--save-report); otherwise display-only.
+
+        Returns the saved file path, or None when nothing was saved."""
         if report:
             logger.info(self._format_heal_report(report, status, attempts))
+        if not getattr(self, "save_report", False):
+            return None
+        try:
+            path = self._save_report_html(report, status, attempts)
+            logger.info(f"📄 Healing report saved: {path}")
+            return str(path)
+        except Exception as e:
+            logger.warning(f"⚠️  Could not save healing report: {e}")
+            return None
+
+    def _save_report_html(self, report: list[dict], status: str, attempts: int) -> Path:
+        """Write a self-contained HTML healing report into
+        <output_dir>/heal_reports/ — one new timestamped file per run."""
+        reports_dir = Path(self.output_dir) / "heal_reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = reports_dir / f"heal-report-{stamp}.html"
+        path.write_text(self._render_report_html(report, status, attempts),
+                        encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _render_report_html(report: list[dict], status: str, attempts: int) -> str:
+        esc = html_lib.escape
+        passed = status == "passed"
+        badge_color = "#16a34a" if passed else "#b91c1c"
+        badge_bg = "#e8f7ee" if passed else "#fdecec"
+
+        attempt_blocks = []
+        for entry in report:
+            files = ", ".join(entry.get("files") or []) or "—"
+            applied = entry.get("applied", False)
+            applied_text = "fix applied" if applied else "no usable fix"
+            applied_color = "#16a34a" if applied else "#b91c1c"
+            attempt_blocks.append(f"""
+    <div class="attempt">
+      <div class="attempt-head">
+        <span class="attempt-no">Attempt {entry.get('attempt', '?')}</span>
+        <span class="applied" style="color:{applied_color}">{applied_text}</span>
+      </div>
+      <table>
+        <tr><th>Problem</th><td>{esc(str(entry.get('problem', '')))}</td></tr>
+        <tr><th>Fix</th><td>{esc(str(entry.get('fix', '')))}</td></tr>
+        <tr><th>Files</th><td>{esc(files)}</td></tr>
+      </table>
+    </div>""")
+
+        if not attempt_blocks:
+            attempt_blocks.append(
+                '\n    <p class="clean">No fixes were needed — '
+                'tests passed on the first run.</p>')
+
+        generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Healing Report — {esc(status.upper())}</title>
+<style>
+  body {{ font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         margin: 0; background: #f3f4f6; color: #1b2a41; }}
+  .wrap {{ max-width: 860px; margin: 32px auto; padding: 0 16px; }}
+  .card {{ background: #fff; border-radius: 10px; padding: 24px 28px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+  h1 {{ font-size: 22px; margin: 0 0 4px; }}
+  .meta {{ color: #5a6b82; font-size: 13px; margin-bottom: 18px; }}
+  .badge {{ display: inline-block; padding: 3px 12px; border-radius: 999px;
+           font-weight: 600; font-size: 13px;
+           color: {badge_color}; background: {badge_bg}; }}
+  .attempt {{ border: 1px solid #e5e7eb; border-radius: 8px;
+             padding: 14px 16px; margin-top: 14px; }}
+  .attempt-head {{ display: flex; justify-content: space-between;
+                  margin-bottom: 8px; }}
+  .attempt-no {{ font-weight: 700; }}
+  .applied {{ font-size: 13px; font-weight: 600; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+  th {{ text-align: left; vertical-align: top; padding: 4px 12px 4px 0;
+       color: #5a6b82; font-weight: 600; white-space: nowrap; width: 70px; }}
+  td {{ padding: 4px 0; word-break: break-word; }}
+  .clean {{ color: #16a34a; font-weight: 600; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🩺 Healing Report</h1>
+    <div class="meta">Generated {generated} · selenium-python-ai-agent</div>
+    <span class="badge">{esc(status.upper())} after {attempts} attempt(s)</span>
+    {''.join(attempt_blocks)}
+  </div>
+</div>
+</body>
+</html>
+"""
 
     def _fix_once(self, resolved: dict[str, Path], output: str,
                   test_filter: str | None, scan_cache: dict[str, str],

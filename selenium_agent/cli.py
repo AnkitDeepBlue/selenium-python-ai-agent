@@ -103,6 +103,8 @@ def _handle_help():
     --test test_login_locked_out_user                ← specific test only
   selenium-agent --heal-only generated_tests/tests/test_login.py \\
     --test "locked_out or invalid_password"          ← multiple (-k syntax)
+  selenium-agent --heal-only generated_tests/tests/test_login.py \\
+    --save-report                                    ← also save HTML report
 
 🔍  SCAN PROJECT
   selenium-agent --scan /path/to/project
@@ -126,6 +128,7 @@ def _handle_help():
   --plan-only   preview plan only (saved to specs/)
   --from-plan   generate from saved plan JSON
   --test        target specific test (use with --heal-only)
+  --save-report save healing report as HTML (heal_reports/)
   --version     show version
 
 📂  GENERATED STRUCTURE
@@ -198,6 +201,10 @@ Other examples:
                         help="Generate code from a saved specs/<slug>.json plan")
     parser.add_argument("--scan",         default=None, metavar="PATH")
     parser.add_argument("--heal-only",    nargs="+", metavar="FILE")
+    parser.add_argument("--save-report",  action="store_true",
+                        help="Also save the healing report as a timestamped "
+                             "HTML file in <output-dir>/heal_reports/. "
+                             "Without this flag the report is display-only.")
     parser.add_argument("--test",          default=None, metavar="TEST_NAME",
                         help="Specific test function to run/heal. "
                              "e.g. --test test_login_locked_out_user")
@@ -276,6 +283,7 @@ Other examples:
             project_root=project_root,
             headless=cfg["headless"],
             explore_pages=args.explore,
+            save_report=args.save_report,
         )
     except ValueError as exc:
         print(f"\n❌ {exc}\n")
@@ -286,6 +294,8 @@ Other examples:
             result = agent.heal_only(args.heal_only, test_filter=args.test)
             emoji = "✅" if result["status"] == "passed" else "❌"
             print(f"\n{emoji} {result['status']} (attempts: {result['attempts']})")
+            if result.get("report_file"):
+                print(f"📄 Healing report: {result['report_file']}")
             sys.exit(0 if result["status"] == "passed" else 1)
 
         if args.from_plan:
