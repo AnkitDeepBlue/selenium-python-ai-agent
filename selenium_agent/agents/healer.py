@@ -651,6 +651,10 @@ class HealerAgent:
         reports_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = reports_dir / f"heal-report-{stamp}.html"
+        n = 2
+        while path.exists():
+            path = reports_dir / f"heal-report-{stamp}-{n}.html"
+            n += 1
         path.write_text(self._render_report_html(report, status, attempts),
                         encoding="utf-8")
         return path
@@ -659,32 +663,43 @@ class HealerAgent:
     def _render_report_html(report: list[dict], status: str, attempts: int) -> str:
         esc = html_lib.escape
         passed = status == "passed"
-        badge_color = "#16a34a" if passed else "#b91c1c"
-        badge_bg = "#e8f7ee" if passed else "#fdecec"
+        badge_class = "badge-pass" if passed else "badge-fail"
 
         attempt_blocks = []
         for entry in report:
-            files = ", ".join(entry.get("files") or []) or "—"
             applied = entry.get("applied", False)
-            applied_text = "fix applied" if applied else "no usable fix"
-            applied_color = "#16a34a" if applied else "#b91c1c"
+            applied_text = "✓ fix applied" if applied else "✗ no usable fix"
+            applied_class = "pill-ok" if applied else "pill-bad"
+            file_chips = "".join(
+                f'<span class="chip">{esc(f)}</span>'
+                for f in (entry.get("files") or [])
+            ) or '<span class="chip chip-empty">no files changed</span>'
             attempt_blocks.append(f"""
     <div class="attempt">
       <div class="attempt-head">
         <span class="attempt-no">Attempt {entry.get('attempt', '?')}</span>
-        <span class="applied" style="color:{applied_color}">{applied_text}</span>
+        <span class="pill {applied_class}">{applied_text}</span>
       </div>
-      <table>
-        <tr><th>Problem</th><td>{esc(str(entry.get('problem', '')))}</td></tr>
-        <tr><th>Fix</th><td>{esc(str(entry.get('fix', '')))}</td></tr>
-        <tr><th>Files</th><td>{esc(files)}</td></tr>
-      </table>
+      <div class="section sec-problem">
+        <div class="sec-label">⚠ Problem</div>
+        <div class="sec-body mono">{esc(str(entry.get('problem', '')))}</div>
+      </div>
+      <div class="section sec-fix">
+        <div class="sec-label">🛠 Fix</div>
+        <div class="sec-body">{esc(str(entry.get('fix', '')))}</div>
+      </div>
+      <div class="section sec-files">
+        <div class="sec-label">📁 Files</div>
+        <div class="sec-body">{file_chips}</div>
+      </div>
     </div>""")
 
         if not attempt_blocks:
-            attempt_blocks.append(
-                '\n    <p class="clean">No fixes were needed — '
-                'tests passed on the first run.</p>')
+            attempt_blocks.append("""
+    <div class="section sec-fix clean-box">
+      <div class="sec-label">✓ Clean run</div>
+      <div class="sec-body">No fixes were needed — tests passed on the first run.</div>
+    </div>""")
 
         generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return f"""<!DOCTYPE html>
@@ -694,36 +709,69 @@ class HealerAgent:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Healing Report — {esc(status.upper())}</title>
 <style>
+  * {{ box-sizing: border-box; }}
   body {{ font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-         margin: 0; background: #f3f4f6; color: #1b2a41; }}
-  .wrap {{ max-width: 860px; margin: 32px auto; padding: 0 16px; }}
-  .card {{ background: #fff; border-radius: 10px; padding: 24px 28px;
-          box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
-  h1 {{ font-size: 22px; margin: 0 0 4px; }}
-  .meta {{ color: #5a6b82; font-size: 13px; margin-bottom: 18px; }}
-  .badge {{ display: inline-block; padding: 3px 12px; border-radius: 999px;
-           font-weight: 600; font-size: 13px;
-           color: {badge_color}; background: {badge_bg}; }}
-  .attempt {{ border: 1px solid #e5e7eb; border-radius: 8px;
-             padding: 14px 16px; margin-top: 14px; }}
+         margin: 0; background: #eef1f6; color: #1b2a41; }}
+  .wrap {{ max-width: 880px; margin: 36px auto; padding: 0 16px; }}
+  .card {{ background: #fff; border-radius: 14px; overflow: hidden;
+          box-shadow: 0 2px 10px rgba(15,29,51,.10); }}
+  .header {{ background: #0f1d33; color: #fff; padding: 24px 30px; }}
+  .header h1 {{ font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }}
+  .header .meta {{ color: #cadcfc; font-size: 13px; }}
+  .summary {{ display: flex; align-items: center; gap: 14px;
+             padding: 16px 30px; border-bottom: 1px solid #e5e7eb;
+             background: #f8fafc; flex-wrap: wrap; }}
+  .badge {{ display: inline-block; padding: 5px 16px; border-radius: 999px;
+           font-weight: 700; font-size: 13px; letter-spacing: .3px; }}
+  .badge-pass {{ color: #fff; background: #16a34a; }}
+  .badge-fail {{ color: #fff; background: #b91c1c; }}
+  .summary .count {{ color: #5a6b82; font-size: 13px; }}
+  .body {{ padding: 10px 30px 26px; }}
+  .attempt {{ border: 1px solid #e5e7eb; border-radius: 12px;
+             padding: 16px 18px; margin-top: 16px; background: #fff; }}
   .attempt-head {{ display: flex; justify-content: space-between;
-                  margin-bottom: 8px; }}
-  .attempt-no {{ font-weight: 700; }}
-  .applied {{ font-size: 13px; font-weight: 600; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
-  th {{ text-align: left; vertical-align: top; padding: 4px 12px 4px 0;
-       color: #5a6b82; font-weight: 600; white-space: nowrap; width: 70px; }}
-  td {{ padding: 4px 0; word-break: break-word; }}
-  .clean {{ color: #16a34a; font-weight: 600; }}
+                  align-items: center; margin-bottom: 12px; }}
+  .attempt-no {{ font-weight: 800; font-size: 15px; color: #0f1d33; }}
+  .pill {{ font-size: 12px; font-weight: 700; padding: 3px 12px;
+          border-radius: 999px; }}
+  .pill-ok {{ color: #16a34a; background: #e8f7ee; }}
+  .pill-bad {{ color: #b91c1c; background: #fdecec; }}
+  .section {{ border-radius: 8px; padding: 10px 14px; margin-top: 10px;
+             border-left: 4px solid; }}
+  .sec-problem {{ background: #fdf2f2; border-left-color: #b91c1c; }}
+  .sec-fix {{ background: #f0faf3; border-left-color: #16a34a; }}
+  .sec-files {{ background: #f1f5fb; border-left-color: #29527a; }}
+  .sec-label {{ font-size: 11px; font-weight: 800; text-transform: uppercase;
+               letter-spacing: .8px; margin-bottom: 5px; }}
+  .sec-problem .sec-label {{ color: #b91c1c; }}
+  .sec-fix .sec-label {{ color: #15803d; }}
+  .sec-files .sec-label {{ color: #29527a; }}
+  .sec-body {{ font-size: 14px; line-height: 1.55; word-break: break-word; }}
+  .mono {{ font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+          font-size: 13px; }}
+  .chip {{ display: inline-block; font-family: "SF Mono", ui-monospace, Menlo,
+          Consolas, monospace; font-size: 12px; background: #fff;
+          border: 1px solid #c9d6ea; color: #29527a; border-radius: 6px;
+          padding: 3px 10px; margin: 2px 6px 2px 0; }}
+  .chip-empty {{ color: #5a6b82; border-style: dashed; }}
+  .clean-box {{ margin-top: 16px; }}
+  .footer {{ padding: 12px 30px 18px; color: #8a97a8; font-size: 12px; }}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🩺 Healing Report</h1>
-    <div class="meta">Generated {generated} · selenium-python-ai-agent</div>
-    <span class="badge">{esc(status.upper())} after {attempts} attempt(s)</span>
-    {''.join(attempt_blocks)}
+    <div class="header">
+      <h1>🩺 Healing Report</h1>
+      <div class="meta">Generated {generated} · selenium-python-ai-agent</div>
+    </div>
+    <div class="summary">
+      <span class="badge {badge_class}">{esc(status.upper())} after {attempts} attempt(s)</span>
+      <span class="count">{len(report)} fix round(s) recorded</span>
+    </div>
+    <div class="body">{''.join(attempt_blocks)}
+    </div>
+    <div class="footer">Every fix shown here was verified by a real re-run of the tests.</div>
   </div>
 </div>
 </body>
