@@ -257,6 +257,9 @@ selenium-agent --heal-only generated_tests/tests/test_login.py \
 
 # Stubborn failure? Give it more rounds and a stronger model
 selenium-agent --heal-only generated_tests/tests/test_login.py --max-retries 8 --model gpt-5
+
+# Keep an HTML report of what was diagnosed and fixed
+selenium-agent --heal-only generated_tests/tests/test_login.py --save-report
 ```
 
 **Smart healing includes:**
@@ -269,6 +272,24 @@ selenium-agent --heal-only generated_tests/tests/test_login.py --max-retries 8 -
 - Missing locators added to page objects (never to test files); `By` imports stripped from tests
 - Targeted mode restores any test functions the LLM accidentally drops
 - CAPTCHA-blocked flows are reported as blocked instead of endlessly "fixed"
+
+### `--save-report` — HTML Healing Report
+
+Every heal run ends with a healing report in the console: per attempt, what
+failed, what was changed, and in which files. By default it is display-only —
+nothing is written to disk. Add `--save-report` to also save it as a
+self-contained HTML file:
+
+```bash
+selenium-agent --heal-only generated_tests/tests/test_login.py --save-report
+# 📄 Healing report: generated_tests/heal_reports/heal-report-20260722-132353.html
+```
+
+- One new timestamped file per run in `<output-dir>/heal_reports/` — reports are never overwritten, so a healing history builds up
+- Saved on **pass and fail alike** — a failed heal is documented too, and a clean first-run pass records that no fixes were needed
+- Self-contained (no external CSS/JS) — share the file, it opens anywhere
+
+![Healing Report](https://raw.githubusercontent.com/AnkitDeepBlue/selenium-python-ai-agent/main/docs/images/heal-report.png)
 
 ### `--scan` — Inspect an Existing Project
 
@@ -355,6 +376,7 @@ generated_tests/
 | `--from-plan FILE` | Generate from saved plan JSON | — |
 | `--heal-only FILE` | Heal specific file(s) | — |
 | `--test TEST_NAME` | Target specific test (with `--heal-only`) | — |
+| `--save-report` | Also save the healing report as a timestamped HTML file | `false` |
 | `--scan PATH` | Scan existing project structure | — |
 | `--version` | Show version | — |
 
