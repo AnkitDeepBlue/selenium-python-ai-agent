@@ -1,7 +1,7 @@
 # Selenium Python AI Agent 🤖
 
 > AI-powered multi-agent framework that **plans**, **generates**, and **heals** Selenium Python tests automatically — working the way **Microsoft Playwright's test agents** do, but for **Selenium Python**. **Standalone and CI-ready — no AI IDE session required. Your tests, your code, your repo.**
-> Supports **Anthropic Claude**, **OpenAI ChatGPT** and **Google Gemini** as LLM backends.
+> Supports **Anthropic Claude**, **OpenAI ChatGPT** and **Google Gemini** (beta) as LLM backends.
 
 [![PyPI version](https://badge.fury.io/py/selenium-python-ai-agent.svg)](https://pypi.org/project/selenium-python-ai-agent/)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
@@ -53,7 +53,7 @@ Your Instruction
 pip install selenium-python-ai-agent
 pip install python-dotenv   # recommended — load keys from .env
 
-# Using Google Gemini? Install the optional Gemini extra:
+# Using Google Gemini (beta)? Install the optional Gemini extra:
 pip install "selenium-python-ai-agent[gemini]"
 ```
 
@@ -81,7 +81,7 @@ selenium-agent config --provider openai --model gpt-4o         # strong all-roun
 selenium-agent config --provider openai --model gpt-5          # most intelligent (reasoning)
 selenium-agent config --provider anthropic --model claude-sonnet-5   # strong all-rounder
 selenium-agent config --provider anthropic --model claude-fable-5    # most intelligent
-selenium-agent config --provider gemini --model gemini-3.8-flash     # Google Gemini
+selenium-agent config --provider gemini --model gemini-3.8-flash     # Google Gemini (beta)
 
 selenium-agent config --base-url https://www.saucedemo.com     # default URL for all runs
 selenium-agent config --headless          # (--no-headless to turn off)
@@ -412,6 +412,12 @@ The provider is inferred from the model name — `--model gemini-3.8-flash`
 selects Gemini automatically, just like `gpt-*` selects OpenAI and `claude-*`
 selects Anthropic. Gemini needs the optional extra:
 `pip install "selenium-python-ai-agent[gemini]"`.
+
+> 🧪 **Gemini support is in beta.** It is new in v0.2.8 and covered by unit
+> tests, but has not yet been run against real projects as extensively as the
+> Anthropic and OpenAI providers. For production suites, Anthropic or OpenAI
+> remain the proven choice. Please report any Gemini issues on
+> [GitHub](https://github.com/AnkitDeepBlue/selenium-python-ai-agent/issues).
 
 ### Corporate LLM gateways & Azure OpenAI
 
