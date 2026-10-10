@@ -21,8 +21,8 @@ logger = setup_logger("CLI")
 def _handle_config(argv):
     """Handle `selenium-agent config [flags]` before main argparse."""
     p = argparse.ArgumentParser(prog="selenium-agent config")
-    p.add_argument("--provider", choices=["anthropic", "openai"])
-    p.add_argument("--model",    help="e.g. gpt-4o-mini, claude-sonnet-4-20250514")
+    p.add_argument("--provider", choices=["anthropic", "openai", "gemini"])
+    p.add_argument("--model",    help="e.g. gpt-4o-mini, claude-sonnet-5, gemini-3.8-flash")
     p.add_argument("--base-url", dest="base_url", help="Default base URL for all tests")
     p.add_argument("--headless",    dest="headless", action="store_true",  default=None)
     p.add_argument("--no-headless", dest="headless", action="store_false", default=None)
@@ -75,6 +75,7 @@ def _handle_help():
 
 🔧  ONE-TIME SETUP
   selenium-agent config --provider openai --model gpt-4o-mini
+  selenium-agent config --provider gemini        ← Google Gemini (pip install 'selenium-python-ai-agent[gemini]')
   selenium-agent config --base-url https://www.yoursite.com
   selenium-agent config --headless          (--no-headless to turn off)
   selenium-agent config --show                      ← verify saved config
@@ -114,7 +115,7 @@ def _handle_help():
   selenium-agent init-agents --project /path/to/project
 
 ⚙️   CONFIG OPTIONS
-  --provider    anthropic | openai          (default: from config)
+  --provider    anthropic | openai | gemini (default: from config)
   --model       e.g. gpt-4o-mini            (default: from config)
   --api-key     your key                    (prefer .env instead)
   --url         override base URL once      (auto-saved to config)
@@ -183,7 +184,7 @@ Other examples:
                         help="What to test. E.g: 'test the login page'")
     parser.add_argument("--api-key",      default=None,
                         help="LLM API key (or set in .env)")
-    parser.add_argument("--provider",     default=None, choices=["anthropic", "openai"],
+    parser.add_argument("--provider",     default=None, choices=["anthropic", "openai", "gemini"],
                         help="LLM provider (default from config)")
     parser.add_argument("--model",        default=None, help="Override model")
     parser.add_argument("--mode",         default=None, choices=["pytest", "bdd"])
@@ -208,7 +209,7 @@ Other examples:
     parser.add_argument("--test",          default=None, metavar="TEST_NAME",
                         help="Specific test function to run/heal. "
                              "e.g. --test test_login_locked_out_user")
-    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.7")
+    parser.add_argument("--version",      action="version", version="selenium-agent 0.2.8")
 
     args = parser.parse_args()
 

@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "selenium-python-ai-agent"
-version = "0.2.7"
+version = "0.2.8"
 description = "AI-powered multi-agent framework to plan, generate and heal Selenium Python tests (pytest + pytest-bdd)"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Ankit Tripathi" }]
-keywords = ["selenium", "testing", "ai", "agent", "automation", "qa", "claude", "openai", "bdd", "pytest-bdd", "gherkin"]
+keywords = ["selenium", "testing", "ai", "agent", "automation", "qa", "claude", "openai", "gemini", "bdd", "pytest-bdd", "gherkin"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -30,6 +30,9 @@ dependencies = [
     "pytest-bdd>=7.0.0",
     "webdriver-manager>=4.0.0",
 ]
+
+[project.optional-dependencies]
+gemini = ["google-genai>=1.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/AnkitDeepBlue/selenium-python-ai-agent"
