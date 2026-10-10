@@ -1,7 +1,7 @@
 """
 Selenium Python AI Agent
 ========================
-A multi-agent framework to plan, code and heal Selenium Python tests using Anthropic or OpenAI.
+A multi-agent framework to plan, code and heal Selenium Python tests using Anthropic, OpenAI or Google Gemini.
 
 Usage (Python Library):
     from selenium_agent import SeleniumAgent

@@ -1,12 +1,12 @@
 """
-LLM provider helpers for Anthropic and OpenAI.
+LLM provider helpers for Anthropic, OpenAI and Google Gemini.
 
 All agents talk to the LLM through this module, which provides:
 - provider normalization + API-key resolution
 - automatic retries with exponential backoff on transient failures
   (rate limits, 5xx, timeouts, connection errors)
-- special handling for OpenAI reasoning models (gpt-5*, o*) whose
-  reasoning tokens count against max_output_tokens
+- special handling for OpenAI reasoning models (gpt-5*, o*) and Gemini
+  thinking models, whose reasoning tokens count against the output cap
 """
 
 import os
@@ -21,10 +21,27 @@ DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
     "openai": "gpt-5-mini",
+    "gemini": "gemini-3.8-flash",
 }
 API_KEY_ENV_VARS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+# Checked only when the primary env var is unset (the Gemini SDK itself
+# also accepts GOOGLE_API_KEY).
+FALLBACK_API_KEY_ENV_VARS = {
+    "gemini": ("GOOGLE_API_KEY",),
+}
+PROVIDER_DISPLAY_NAMES = {
+    "anthropic": "Anthropic Claude",
+    "openai": "OpenAI",
+    "gemini": "Google Gemini",
+}
+API_KEY_URLS = {
+    "anthropic": "https://console.anthropic.com",
+    "openai": "https://platform.openai.com/api-keys",
+    "gemini": "https://aistudio.google.com/apikey",
 }
 
 MAX_RETRIES = 3
@@ -54,6 +71,8 @@ def infer_provider_for_model(model: str | None) -> str | None:
         return "openai"
     if m.startswith("claude"):
         return "anthropic"
+    if m.startswith("gemini"):
+        return "gemini"
     return None
 
 
@@ -78,12 +97,11 @@ def get_api_key_env_var(provider: str) -> str:
 def format_missing_api_key_error(provider: str) -> str:
     normalized = normalize_provider(provider)
     env_var = get_api_key_env_var(normalized)
-    provider_name = "Anthropic Claude" if normalized == "anthropic" else "OpenAI"
     return (
-        f"{provider_name} API key required!\n"
+        f"{PROVIDER_DISPLAY_NAMES[normalized]} API key required!\n"
         f"Pass it as: SeleniumAgent(provider='{normalized}', api_key='your-key')\n"
         f"Or set env var: export {env_var}='your-key'\n"
-        f"Get your key at: https://console.anthropic.com"
+        f"Get your key at: {API_KEY_URLS[normalized]}"
     )
 
 
@@ -92,7 +110,14 @@ def resolve_api_key(provider: str, api_key: str | None = None) -> str | None:
     if api_key:
         return api_key
     env_var = get_api_key_env_var(normalized)
-    return os.environ.get(env_var)
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    for fallback in FALLBACK_API_KEY_ENV_VARS.get(normalized, ()):
+        value = os.environ.get(fallback)
+        if value:
+            return value
+    return None
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -243,6 +268,105 @@ class OpenAILLMClient(BaseLLMClient):
         return text
 
 
+class GeminiAPIError(RuntimeError):
+    """A Gemini SDK error re-raised with the HTTP status as `status_code`,
+    so the shared retry policy treats 429/5xx as transient and other 4xx
+    as fatal — the same way it treats the other providers' errors."""
+
+    def __init__(self, message: str, status_code: int | None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GeminiLLMClient(BaseLLMClient):
+    """Google Gemini-backed text generation client (google-genai SDK)."""
+
+    def __init__(self, api_key: str, model: str):
+        try:
+            genai = import_module("google.genai")
+            self._types = import_module("google.genai.types")
+            self._errors = import_module("google.genai.errors")
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "The 'google-genai' package is required for provider='gemini'. "
+                "Install it with: pip install 'selenium-python-ai-agent[gemini]'"
+            ) from exc
+        self.client = genai.Client(api_key=api_key)
+        self.model = model
+
+    def _is_thinking_model(self) -> bool:
+        # Gemini 3.x thinks by default, and thought tokens count against
+        # max_output_tokens.
+        return self.model.lower().startswith("gemini-3")
+
+    def _build_config(self, system_prompt: str, max_output_tokens: int,
+                      json_mode: bool, with_thinking: bool):
+        params = {
+            "system_instruction": system_prompt,
+            "max_output_tokens": max_output_tokens,
+        }
+        if json_mode:
+            params["response_mime_type"] = "application/json"
+        if with_thinking:
+            params["thinking_config"] = self._types.ThinkingConfig(thinking_level="low")
+        return self._types.GenerateContentConfig(**params)
+
+    def _call(self, user_prompt: str, config):
+        try:
+            return self.client.models.generate_content(
+                model=self.model, contents=user_prompt, config=config,
+            )
+        except self._errors.APIError as exc:
+            code = getattr(exc, "code", None)
+            raise GeminiAPIError(
+                f"Gemini API error {code}: {getattr(exc, 'message', exc)}",
+                code if isinstance(code, int) else None,
+            ) from exc
+
+    @staticmethod
+    def _hit_token_limit(response) -> bool:
+        for candidate in getattr(response, "candidates", None) or []:
+            reason = getattr(candidate, "finish_reason", None)
+            if "MAX_TOKENS" in str(getattr(reason, "value", reason)):
+                return True
+        return False
+
+    def _generate_once(self, system_prompt: str, user_prompt: str, max_tokens: int,
+                       json_mode: bool = False) -> str:
+        thinking = self._is_thinking_model()
+        cap = max(max_tokens * 2, 4000) if thinking else max_tokens
+
+        try:
+            config = self._build_config(system_prompt, cap, json_mode, thinking)
+        except Exception:  # noqa: BLE001 — older SDK without thinking_level
+            thinking = False
+            config = self._build_config(system_prompt, cap, json_mode, False)
+
+        try:
+            response = self._call(user_prompt, config)
+        except GeminiAPIError as exc:
+            if not (thinking and exc.status_code == 400):
+                raise
+            # Model rejected the thinking level — retry once without it.
+            config = self._build_config(system_prompt, cap, json_mode, False)
+            response = self._call(user_prompt, config)
+
+        text = (getattr(response, "text", None) or "").strip()
+        if not text and self._hit_token_limit(response):
+            # Thinking consumed the whole budget — one retry with a bigger cap
+            cap *= 2
+            config.max_output_tokens = cap
+            response = self._call(user_prompt, config)
+            text = (getattr(response, "text", None) or "").strip()
+
+        if not text:
+            raise RuntimeError(
+                f"Gemini model '{self.model}' returned an empty response. "
+                f"Try a larger max_tokens or a different Gemini model."
+            )
+        return text
+
+
 def create_llm_client(
     provider: str,
     api_key: str,
@@ -256,5 +380,7 @@ def create_llm_client(
         return AnthropicLLMClient(api_key=api_key, model=resolved_model)
     if normalized == "openai":
         return OpenAILLMClient(api_key=api_key, model=resolved_model)
+    if normalized == "gemini":
+        return GeminiLLMClient(api_key=api_key, model=resolved_model)
 
     raise ValueError(f"Unsupported provider '{provider}'")

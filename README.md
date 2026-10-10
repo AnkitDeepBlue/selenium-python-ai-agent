@@ -1,7 +1,7 @@
 # Selenium Python AI Agent 🤖
 
 > AI-powered multi-agent framework that **plans**, **generates**, and **heals** Selenium Python tests automatically — working the way **Microsoft Playwright's test agents** do, but for **Selenium Python**. **Standalone and CI-ready — no AI IDE session required. Your tests, your code, your repo.**
-> Supports **Anthropic Claude** and **OpenAI ChatGPT** as LLM backends.
+> Supports **Anthropic Claude**, **OpenAI ChatGPT** and **Google Gemini** as LLM backends.
 
 [![PyPI version](https://badge.fury.io/py/selenium-python-ai-agent.svg)](https://pypi.org/project/selenium-python-ai-agent/)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
@@ -52,6 +52,9 @@ Your Instruction
 ```bash
 pip install selenium-python-ai-agent
 pip install python-dotenv   # recommended — load keys from .env
+
+# Using Google Gemini? Install the optional Gemini extra:
+pip install "selenium-python-ai-agent[gemini]"
 ```
 
 ### 2. Set API Keys
@@ -61,11 +64,15 @@ Create a `.env` file in your project root (git-ignored automatically):
 ```env
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...          # GOOGLE_API_KEY is also accepted
 ```
+
+You only need the key for the provider you use. Gemini keys are created in
+[Google AI Studio](https://aistudio.google.com/apikey).
 
 ### 3. One-Time Config Setup
 
-Works with **any OpenAI or Anthropic model** — pick the one that fits your budget and complexity:
+Works with **any OpenAI, Anthropic or Google Gemini model** — pick the one that fits your budget and complexity:
 
 ```bash
 # any of these (or any other model your API key can access):
@@ -74,6 +81,7 @@ selenium-agent config --provider openai --model gpt-4o         # strong all-roun
 selenium-agent config --provider openai --model gpt-5          # most intelligent (reasoning)
 selenium-agent config --provider anthropic --model claude-sonnet-5   # strong all-rounder
 selenium-agent config --provider anthropic --model claude-fable-5    # most intelligent
+selenium-agent config --provider gemini --model gemini-3.8-flash     # Google Gemini
 
 selenium-agent config --base-url https://www.saucedemo.com     # default URL for all runs
 selenium-agent config --headless          # (--no-headless to turn off)
@@ -342,7 +350,7 @@ generated_tests/
 | Concern | What the framework does |
 |---|---|
 | LLM flakiness | Automatic retries with exponential backoff on rate limits / 5xx / timeouts |
-| Malformed LLM JSON | Native JSON modes (OpenAI `json_object`, Anthropic prefill) + robust extraction: fences, prose, trailing commas, truncation repair |
+| Malformed LLM JSON | Native JSON modes (OpenAI `json_object`, Anthropic prefill, Gemini `application/json`) + robust extraction: fences, prose, trailing commas, truncation repair |
 | Broken generated code | Every file `ast`-validated + architecture-validated before saving; automatic repair round |
 | Broken "fixes" | Healer rejects invalid fixes — never overwrites working files |
 | Unverified fixes | Final heal attempt always followed by a verification test run |
@@ -353,7 +361,7 @@ generated_tests/
 | Bot protection | CAPTCHA detected and reported — never bypassed, never blindly retried |
 | Hung test runs | pytest executed with a hard timeout |
 | Existing projects | ProjectScanner detects your BasePage, layout & conventions; code fits in |
-| Reasoning models | OpenAI gpt-5*/o* token budgets handled (reasoning tokens accounted for) |
+| Reasoning models | OpenAI gpt-5*/o* and Gemini 3.x thinking-token budgets handled (reasoning tokens accounted for) |
 
 ---
 
@@ -361,7 +369,7 @@ generated_tests/
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--provider` | `anthropic` or `openai` | from config |
+| `--provider` | `anthropic`, `openai` or `gemini` | from config |
 | `--model` | Any model of that provider, for this run | from config |
 | `--api-key` | API key (prefer .env instead) | env var |
 | `--url` | Base URL for this run (also saved to config) | from config |
@@ -386,7 +394,7 @@ Subcommands: `selenium-agent config …`, `selenium-agent init-agents …`, `sel
 
 ## 🤖 Supported Models
 
-**Any chat model from OpenAI or Anthropic works** — pass it via `--model` or save it with `selenium-agent config --model <name>`. Recommendations:
+**Any chat model from OpenAI, Anthropic or Google Gemini works** — pass it via `--model` or save it with `selenium-agent config --model <name>`. Recommendations:
 
 | Provider | Model | Best for |
 |----------|-------|----------|
@@ -397,6 +405,28 @@ Subcommands: `selenium-agent config …`, `selenium-agent init-agents …`, `sel
 | Anthropic | `claude-opus-4-8` | Complex flows, high quality |
 | Anthropic | `claude-sonnet-5` | Strong default for real projects |
 | Anthropic | `claude-haiku-4-5-20251001` | Simple flows, lowest cost |
+| Google Gemini | `gemini-3.8-flash` | Strong default (Gemini's recommended Flash model) |
+| Google Gemini | `gemini-3.5-flash-lite` | Simple flows, lowest cost |
+
+The provider is inferred from the model name — `--model gemini-3.8-flash`
+selects Gemini automatically, just like `gpt-*` selects OpenAI and `claude-*`
+selects Anthropic. Gemini needs the optional extra:
+`pip install "selenium-python-ai-agent[gemini]"`.
+
+### Corporate LLM gateways & Azure OpenAI
+
+If your company routes LLM traffic through its own gateway or an Azure OpenAI
+deployment, point the official SDKs at it with their standard environment
+variables — no framework configuration needed:
+
+```env
+OPENAI_BASE_URL=https://your-gateway.example.com/v1
+ANTHROPIC_BASE_URL=https://your-gateway.example.com
+```
+
+The endpoint must implement the provider's own API: the OpenAI provider uses
+the **Responses API**, so an endpoint that only offers Chat Completions will
+not work.
 
 ---
 
@@ -404,7 +434,7 @@ Subcommands: `selenium-agent config …`, `selenium-agent init-agents …`, `sel
 
 - Python 3.9+
 - Chrome browser installed
-- API key from Anthropic **or** OpenAI
+- API key from Anthropic, OpenAI **or** Google Gemini
 
 ---
 
